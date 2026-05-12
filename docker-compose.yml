@@ -1,0 +1,65 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: docfill
+      POSTGRES_USER: docfill
+      POSTGRES_PASSWORD: docfill_dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docfill"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  onlyoffice:
+    image: onlyoffice/documentserver:8.2
+    ports:
+      - "8080:80"
+    environment:
+      ALLOW_PRIVATE_IP_ADDRESS: "true"
+      ALLOW_META_IP_ADDRESS: "true"
+    volumes:
+      - onlyoffice_data:/var/www/onlyoffice/Data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      DATABASE_URL: "postgresql+psycopg://docfill:docfill_dev@postgres:5432/docfill"
+      HOST_URL: "http://backend:8002"
+      ONLYOFFICE_URL: "http://onlyoffice:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/processed:/app/processed
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      NEXT_PUBLIC_API_URL: "http://localhost:8002"
+      BACKEND_URL: "http://backend:8002"
+      NEXT_PUBLIC_ONLYOFFICE_URL: "http://localhost:8080"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  onlyoffice_data:
