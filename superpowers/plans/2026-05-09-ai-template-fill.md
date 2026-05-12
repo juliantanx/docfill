@@ -196,7 +196,8 @@ Do not proceed to implementation until the above three questions are answered fr
   - invalid field ids
 - [ ] Chunk by file boundary first, then by content length if needed
 - [ ] Do not use blanket `except Exception` for all logic paths
-- [ ] Prefer preserving first trustworthy non-empty value instead of blindly overriding with later chunks
+- [ ] Implement "last non-empty wins" merge strategy: later chunks can override earlier values if they are non-empty and pass validation. This prevents an early chunk's incorrect value from blocking a correct value from a later chunk
+- [ ] Add `_validate_value()` method to filter placeholder values ("无", "N/A", "暂无", "待定", "-", "null", "undefined", "xxx") — validated values always override unvalidated ones
 
 ### Verification
 
@@ -257,7 +258,7 @@ Do not proceed to implementation until the above three questions are answered fr
 - [ ] Create a new `filled_template` `Document` record
 - [ ] Assign new `onlyoffice_doc_key` using the same mechanism the project already uses for new doc versions
 - [ ] Persist response fields only if schema is confirmed compatible
-- [ ] On DB failure after file creation, delete the generated file
+- [ ] On DB failure after file creation, delete the generated file. Use a try/except wrapper around the DB commit + file creation sequence. Write file first, then commit DB; on DB failure, delete file in finally block. Mark this as a best-effort cleanup — if the process crashes between file write and DB commit, a scheduled cleanup job should handle orphan files
 
 ### Verification
 
@@ -345,6 +346,7 @@ Do not proceed to implementation until the above three questions are answered fr
 ### Verification
 
 - [ ] Run API integration tests only
+- [ ] **Caveat**: Integration tests use SQLite, which has different SQL semantics from PostgreSQL (e.g., JSON operators, array types). Before production deployment with PostgreSQL, run at least one manual end-to-end test against a real PostgreSQL instance to catch SQL compatibility issues
 - [ ] Run all `doc-service` tests together
 - [ ] Start service locally and ensure no import/startup errors
 

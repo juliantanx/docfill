@@ -11,7 +11,7 @@
 
 ## 目标
 
-1. 切换到 deepseek-v4-flash 模型，预计速度提升 5-10 倍
+1. 切换到 deepseek-v4-flash 模型，根据初步测试预计速度有显著提升（具体倍数需基准测试验证）
 2. SSE 实时推送进度（提取 → 分析 → LLM chunk 进度 → 填充 → 完成）
 3. 支持取消和断点续传（chunk 级粒度）
 4. 填写结果在当前页面 OnlyOffice 预览
@@ -63,9 +63,11 @@ status 新增值：`ai_paused`（用户取消暂停）
 
 **取消端点**：`POST /{doc_id}/ai-fill-cancel`
 
-- 设置文档的取消标志
-- SSE 流在下一个 chunk 完成后检查标志，停止处理并保存进度
+- 设置文档的 `fill_progress.cancelled = True`（数据库标志，多 worker 安全）
+- SSE 流在下一个 chunk 完成后查询数据库检查标志，停止处理并保存进度
 - 返回 `{step: "cancelled", message: "已暂停", percent: 当前进度}`
+
+> **注意**：不可使用内存字典（如 `_cancel_flags`）存储取消标志，因为多 worker 部署（gunicorn/uvicorn multi-worker）下不同进程间不共享内存。
 
 **SSE 事件格式**：
 ```
@@ -109,6 +111,8 @@ data: {"step": "error", "message": "...", "percent": 100}
 - 非空
 - 长度 > 1
 - 不包含占位符：`["无", "N/A", "暂无", "待定", "-", "null", "undefined", "xxx"]`
+- 占位符列表应可通过环境变量 `LLM_PLACEHOLDER_VALUES` 配置（逗号分隔），默认值覆盖常见场景
+- 校验逻辑抽取为 `LLMService._validate_value()` 静态方法，便于单独测试
 - 校验不通过的字段标记为 `empty`
 
 ### 6. 错误处理
@@ -122,6 +126,14 @@ data: {"step": "error", "message": "...", "percent": 100}
 | 模板无待填字段 | SSE 返回 error："商务文件中未识别到待填字段" |
 | 网络中断 | 前端检测 fetch 异常，提示"网络中断，可点击继续填写" |
 
+### 7. SSE 断连处理
+
+| 场景 | 服务端行为 | 客户端行为 |
+|------|-----------|-----------|
+| 客户端网络中断 | 继续处理当前 chunk，完成后检查数据库中 `fill_progress`；若客户端未重连，服务端在所有 chunk 完成后正常保存结果 | 检测到 fetch 异常后提示"网络中断，可点击继续填写" |
+| 客户端主动取消 | 调用 cancel 端点设置 DB 标志 | 显示暂停状态 |
+| 服务端处理超时 | 单 chunk > 60s 超时后标记该 chunk 为空，继续下一 chunk | 正常接收 SSE 事件 |
+
 ## 文件变更清单
 
 ### 后端（doc-service）
@@ -129,6 +141,7 @@ data: {"step": "error", "message": "...", "percent": 100}
 - `app/api/v1/documents.py` — 重写 ai-fill-stream 端点，新增 ai-fill-cancel 端点
 - `app/services/llm_service.py` — 新增结果校验逻辑
 - `app/core/config.py` — LLM_MODEL 默认值改为 deepseek-v4-flash
+  - 新增环境变量 `LLM_PLACEHOLDER_VALUES=无,N/A,暂无,待定,-,null,undefined,xxx`
 - `.env` — 更新 LLM_MODEL
 
 ### 前端

@@ -96,7 +96,9 @@ file_path: str
 status: enum(parsing | ready | filling | filled | error)
 fields: JSON[]          # 识别出的字段列表
 outline: JSON[]         # 文档大纲树
-references: JSON[]      # 参考文档列表（doc_id + filename）
+references: JSON[]      # 参考文档列表（doc_id + filename + file_path + extracted_text）
+                       # 注意：开发阶段使用 JSON 列存储提取文本（单篇限 10000 字符）；
+                       # 生产环境应迁移为独立 references 表 + 全文搜索
 created_at: datetime
 updated_at: datetime
 ```
@@ -128,10 +130,34 @@ GET    /api/v1/documents/{id}/raw-file       # OnlyOffice 原文件下载
 POST   /api/v1/documents/{id}/ai-fill        # 触发 AI 填写（SSE 流响应）
 DELETE /api/v1/documents/{id}/ai-fill        # 取消 AI 填写
 PATCH  /api/v1/documents/{id}/fields/{fid}   # 手动更新单个字段值
-POST   /api/v1/documents/{id}/confirm        # 写回字段到文档
+POST   /api/v1/documents/{id}/confirm        # 写回字段到文档，生成新文件（不覆盖原文件）
 GET    /api/v1/documents/{id}/download       # 下载填充后文档
 POST   /api/v1/onlyoffice/callback           # OnlyOffice 保存回调
 ```
+
+## 5.1 取消与续传设计
+
+AI 填写支持取消和断点续传：
+
+- **取消**：`DELETE /api/v1/documents/{id}/ai-fill`，服务端设置 `status = "ready"` 并保留 `partial_fields`。
+  正在执行的 SSE 流在下一个字段完成后检查状态并停止。
+- **续传**：`POST /api/v1/documents/{id}/ai-fill` 检测到 `partial_fields` 非空时，仅对未填写字段调用 LLM。
+- **SSE 断连**：服务端继续处理当前 chunk 并保存结果，客户端重连后可获取已填字段。
+
+### Document 模型新增字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| partial_fields | JSON | 已填写的部分字段结果，格式 `{field_id: value}` |
+| error_message | Text | 错误信息 |
+
+### LLM 结果校验
+
+后端对 LLM 返回值做基本质量校验：
+- 非空且长度 > 1
+- 不包含占位符（`无`、`N/A`、`暂无`、`待定`、`-`、`null`、`undefined`、`xxx`）
+- 占位符列表可通过 `LLM_PLACEHOLDER_VALUES` 环境变量配置
+- 校验不通过的字段标记为 `empty`
 
 ---
 
@@ -156,7 +182,7 @@ user:   分析以下文档内容并完成所有可填写字段。
         - 对于个人信息字段（姓名、单位、日期、联系方式等）：
           返回 {"id": "f1", "value": "", "requires_input": true}
 
-        文档全文：{document_text}
+        文档全文（含表格文本）：{document_text}
         待填字段列表（JSON）：{fields_json}
 ```
 
@@ -177,6 +203,14 @@ data: {"filled_count": 12, "empty_count": 0}
 event: error
 data: {"message": "AI 服务暂时不可用"}
 ```
+
+> **注意**：`document_text` 提取必须包含表格内容（遍历 `doc.tables` 中每个 cell 的文本），
+> 否则无参考模式下 AI 无法获取表格上下文。
+
+> **为什么用 POST 返回 SSE？** AI 填写需要请求体（字段列表、参考文档标识），
+> GET 不适合携带复杂请求体。SSE 相比 WebSocket 实现更简单、兼容性更好，
+> 且 AI 填写是单向推送场景，不需要双向通信。如果代理/CDN 不兼容 POST+SSE，
+> 可降级为 POST 返回完整 JSON（轮询模式）。
 
 ---
 
@@ -211,9 +245,12 @@ data: {"message": "AI 服务暂时不可用"}
 
 ### 7.3 个人信息弹窗
 
-当 AI 返回 `requires_input: true` 时，右侧面板弹出轻量 Modal：
-- 一次只问一个字段
-- 输入后继续填写流程
+当 AI 返回 `requires_input: true` 时，右侧面板弹出 Modal 收集个人信息：
+
+- 一次性收集所有需要用户输入的字段（而非逐个弹窗）
+- 弹窗内以表单形式列出所有 `requires_input` 字段，每行一个输入框
+- 用户填写后统一提交，继续填写流程
+- 可跳过任意字段，跳过的字段保留 `empty` 状态
 
 ---
 
@@ -225,6 +262,7 @@ data: {"message": "AI 服务暂时不可用"}
 | 文档无可识别字段 | status=error，前端提示"未识别到可填写内容" |
 | AI 填写中断 | SSE 断连保留已填字段，支持续传 |
 | OnlyOffice 无法连接 | 降级：隐藏编辑器，仅显示字段面板，仍可下载 |
+| confirm 写回失败 | 不修改原 file_path，返回错误信息，原始模板仍可访问 |
 | 个人信息字段 | `requires_input: true`，前端弹窗收集后继续 |
 | LLM API 失败 | SSE error 事件，前端显示重试按钮 |
 
@@ -243,6 +281,21 @@ data: {"message": "AI 服务暂时不可用"}
 - SSE 事件处理与字段更新
 - 个人信息字段弹窗触发与提交
 - OnlyOffice 降级渲染逻辑
+
+---
+
+## 9.1 安全与认证（MVP 限制）
+
+MVP 阶段不实现用户认证与授权。任何知道 `doc_id` 的人都可以访问文档。
+此限制在以下条件下可接受：
+- 单用户本地部署场景
+- 内网部署且网络隔离
+
+生产部署前必须补充：
+- 用户认证（JWT / Session）
+- 文档访问权限校验
+- API rate limiting
+- AI fill 调用次数限制（防止 LLM 费用失控）
 
 ---
 

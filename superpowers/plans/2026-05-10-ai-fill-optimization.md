@@ -112,8 +112,27 @@ git commit -m "feat: add resume flag to AiFillRequest schema"
 PLACEHOLDER_VALUES = {"无", "n/a", "暂无", "待定", "-", "null", "undefined", "xxx", "n/a", "暂无信息"}
 
 
+class LLMCallError(Exception):
+    """LLM 调用失败（API/网络错误）。"""
+    pass
+
+class LLMResponseError(Exception):
+    """LLM 返回内容异常（非 JSON / 字段 ID 不匹配）。"""
+    pass
+
+
 class LLMService:
     # ... 现有 __init__ 不变 ...
+
+    def _call_llm(self, fields_json: str, chunk: str) -> dict[str, str]:
+        """调用 LLM 并返回字段结果。
+
+        Raises:
+            LLMCallError: API/网络调用失败。
+            LLMResponseError: 返回内容非 JSON 或字段 ID 不匹配。
+        """
+        # ... 现有实现 ...
+        pass
 
     @staticmethod
     def _validate_value(value: str) -> str:
@@ -162,6 +181,10 @@ class LLMService:
         return merged_result
 ```
 
+> **重要**：SSE 端点必须通过 `match_fields` 的 `on_chunk_done` 回调来推送进度和保存中间结果，
+> 而不是绕过 `match_fields` 直接调用 `_call_llm` 私有方法。如果 `match_fields` 的接口不满足需求，
+> 应扩展 `match_fields` 而不是在端点层重新实现 LLM 调用循环。
+
 - [ ] **Step 2: Commit**
 
 ```bash
@@ -176,17 +199,26 @@ git commit -m "feat: add LLM result validation and chunk callback"
 **Files:**
 - Modify: `doc-service/app/api/v1/documents.py`
 
+> **重构提醒**：当前 `generate()` 函数超 200 行，混合了业务逻辑、数据库操作和 SSE 格式化。
+> 实现时应拆分为：
+> - `_sse_event()` — SSE 格式化辅助函数
+> - `_do_extract()` — 提取知识库文本阶段
+> - `_do_analyze()` — 分析字段阶段
+> - `_do_llm_chunks()` — LLM chunk 处理循环
+> - `_do_fill_and_save()` — 填充模板 + 保存记录
+> 主 `generate()` 函数仅编排阶段调用和 yield SSE 事件。
+
 - [ ] **Step 1: 修改 AiFillRequest import（已在 Task 2 完成 schema 修改）**
 
 在文件顶部已有的 import 中确认 `AiFillRequest` 包含 `resume` 字段。
 
-- [ ] **Step 2: 添加取消标志存储（内存字典，简单实现）**
+- [ ] **Step 2: 取消标志使用数据库（多 worker 安全）**
 
-在文件顶部（router 定义之后）添加：
+不使用内存字典存储取消标志。取消端点直接更新 `Document.fill_progress.cancelled = True`，
+SSE 流在每次 chunk 完成后查询数据库检查 `cancelled` 标志。
 
 ```python
-# 取消标志存储（doc_id → bool）
-_cancel_flags: dict[str, bool] = {}
+# 不使用内存 _cancel_flags，改为查询数据库
 ```
 
 - [ ] **Step 3: 添加取消端点**
@@ -208,7 +240,10 @@ async def cancel_ai_fill(
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"文档不存在: {doc_id}")
 
-    _cancel_flags[doc_id] = True
+    if doc.fill_progress is None:
+        doc.fill_progress = {}
+    doc.fill_progress["cancelled"] = True
+    db.commit()
     return {"message": "取消请求已提交，AI 将在当前步骤完成后暂停"}
 ```
 
@@ -253,11 +288,15 @@ async def trigger_ai_fill_stream(
     template_filename = doc.original_filename
     resume = body.resume
 
-    # 清除之前的取消标志
-    _cancel_flags.pop(doc_id, None)
+    # 清除之前的取消标志（数据库中）
+    doc.fill_progress = None if not resume else doc.fill_progress
+    if doc.fill_progress:
+        doc.fill_progress["cancelled"] = False
 
     def generate():
-        gen_db = SessionLocal()
+        gen_db = next(get_db())
+        # 注意：在 SSE generator 中无法使用 FastAPI 依赖注入，
+        # 必须手动管理会话生命周期。确保在 finally 中关闭。
         try:
             # === 续传逻辑：读取已有进度 ===
             start_chunk = 0
@@ -362,7 +401,9 @@ async def trigger_ai_fill_stream(
             # 逐 chunk 调用 LLM，手动控制循环以支持取消
             for chunk_idx in range(start_chunk, total_chunks):
                 # 检查取消标志
-                if _cancel_flags.get(doc_id):
+                # 查询数据库检查取消标志
+                _check_doc = gen_db.query(Document).filter(Document.id == doc_id).first()
+                if _check_doc and _check_doc.fill_progress and _check_doc.fill_progress.get("cancelled"):
                     # 保存当前进度
                     paused_doc = gen_db.query(Document).filter(Document.id == doc_id).first()
                     if paused_doc:
@@ -374,7 +415,10 @@ async def trigger_ai_fill_stream(
                         }
                         paused_doc.partial_fields = merged_result
                         gen_db.commit()
-                    _cancel_flags.pop(doc_id, None)
+                    # 清除取消标志
+                    if paused_doc.fill_progress:
+                        paused_doc.fill_progress["cancelled"] = False
+                        gen_db.commit()
                     yield _sse_event({
                         "step": "cancelled",
                         "message": "AI 填写已暂停",
@@ -485,12 +529,18 @@ async def trigger_ai_fill_stream(
                 "fields": response_fields,
             })
 
+        except LLMCallError as e:
+            logger.error("AI 填写 LLM 调用失败: %s", e)
+            yield _sse_event({"step": "error", "message": f"AI 服务调用失败: {e}", "percent": 100})
+        except json.JSONDecodeError as e:
+            logger.error("AI 填写 LLM 返回解析失败: %s", e)
+            yield _sse_event({"step": "error", "message": "AI 返回格式异常", "percent": 100})
         except Exception as e:
-            import traceback
-            traceback.print_exc()
+            logger.exception("AI 填写未知异常")
             yield _sse_event({"step": "error", "message": f"AI 填写异常: {e}", "percent": 100})
         finally:
             gen_db.close()
+            # 确保数据库会话始终关闭，避免连接泄露
 
     return StreamingResponse(
         generate(),

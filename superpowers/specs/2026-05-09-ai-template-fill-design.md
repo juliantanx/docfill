@@ -64,6 +64,8 @@
 - 上传商务文件和上传招标文件时，前端都必须传入同一个 `job_id`。
 - 如果页面是通过已有 `doc_id` 进入，则前端应优先从文档详情中恢复其 `job_id`，而不是重新生成。
 - 一个 `job_id` 在本次功能中只服务于一个商务文件上下文；如果用户重新开始新的填写任务，应生成新的 `job_id`。
+- 前端生成 `job_id` 时应使用 `crypto.randomUUID()`，并在 `sessionStorage` 中缓存当前 `job_id`，
+  防止页面意外刷新导致 `job_id` 丢失。后端也应校验同一 `job_id` 下不允许重复上传同一商务文件。
 
 ### 4.2 文档版本约束
 
@@ -218,7 +220,8 @@ class TemplateField:
     id: str
     label: str
     field_type: str      # bracket | blank | table_cell | inline_paren
-    location: str        # 仅在本次分析-填充流程内有效
+    location: str        # 仅在本次分析-填充流程内有效，但 **必须在单次流程内完整传递给填充引擎**，不可中途中断后重建。
+                                  # 如果需要跨会话持久化，应将 `location` 序列化到文档记录的 `fields` JSON 列中，并在续传时恢复。
     original_text: str
 ```
 
@@ -241,7 +244,8 @@ class TemplateField:
 
 ### 9.1 接入方式
 
-复用 OpenAI SDK 兼容调用方式，但实际 `base_url` 与模型名应以百度千帆当前可用的兼容接口为准，在实现前必须通过真实调用样例验证。
+复用 OpenAI SDK 兼容调用方式。`base_url` 与模型名取决于实际部署的 LLM 服务商（百度千帆、智谱、DeepSeek 等均提供 OpenAI 兼容接口），
+在实现前必须通过真实调用样例验证接口兼容性。`.env` 中 `LLM_MODEL` 应与 `LLM_BASE_URL` 对应同一服务商。
 
 环境变量：
 
@@ -370,7 +374,7 @@ AI 填充完成后的切换规则：
 # LLM
 LLM_BASE_URL=<qianfan-openai-compatible-base-url>
 LLM_API_KEY=
-LLM_MODEL=glm-5
+LLM_MODEL=<your-model-name>  # 需与 LLM_BASE_URL 对应同一服务商
 
 # OnlyOffice
 ONLYOFFICE_URL=http://localhost:8080
