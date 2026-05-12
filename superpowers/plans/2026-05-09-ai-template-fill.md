@@ -4,6 +4,8 @@
 
 **Goal:** Implement AI-powered auto-fill for business files using bid documents and Baidu Qianfan LLM, then switch OnlyOffice preview to the newly filled document.
 
+> **状态：** 本计划为 ai-bidding-assistant 的 doc-service 原始实现计划。对于新的独立 docfill 通用工具项目，参见 `2026-05-12-docfill-plan.md`。如 Plan 3 为当前方向，本计划的实现价值仅限于代码复用参考。
+
 **Important:** This is a **revised v2 execution plan**. It replaces the earlier line-number-based instructions with a safer, code-aware workflow. Do not mechanically apply snippets without first checking the current repository structure.
 
 ---
@@ -91,7 +93,8 @@ Do not proceed to implementation until the above three questions are answered fr
   - `LLM_MODEL`
   - `ONLYOFFICE_URL`
   - `ONLYOFFICE_JWT_SECRET`
-- [ ] Align config names in `config.py` to `llm_*`
+  - `LLM_PLACEHOLDER_VALUES`（可选，逗号分隔的占位符列表，默认值见 Phase 5）
+- [ ] Align config names in `config.py` to `llm_*`，新增 `llm_placeholder_values: str` 字段
 - [ ] Add `parent_doc_id` to `Document`
 - [ ] Add `AiFillRequest.job_id`
 - [ ] Add `AiFillResponse.filled_doc_id`
@@ -197,7 +200,9 @@ Do not proceed to implementation until the above three questions are answered fr
 - [ ] Chunk by file boundary first, then by content length if needed
 - [ ] Do not use blanket `except Exception` for all logic paths
 - [ ] Implement "last non-empty wins" merge strategy: later chunks can override earlier values if they are non-empty and pass validation. This prevents an early chunk's incorrect value from blocking a correct value from a later chunk
-- [ ] Add `_validate_value()` method to filter placeholder values ("无", "N/A", "暂无", "待定", "-", "null", "undefined", "xxx") — validated values always override unvalidated ones
+- [ ] Add `_validate_value()` method to filter placeholder values — validated values always override unvalidated ones
+  - 占位符列表从 `settings.llm_placeholder_values` 读取（逗号分隔），默认值：`"无,N/A,暂无,待定,-,null,undefined,xxx,不适用,不存在,tbd"`
+  - 匹配时忽略大小写，支持通过 .env 或配置文件扩展，无需修改代码
 
 ### Verification
 
@@ -296,6 +301,11 @@ Do not proceed to implementation until the above three questions are answered fr
   - do not set page state to `filled`
   - restore safe interactive state
   - keep current document preview unchanged
+- [ ] Error recovery UX design:
+  - 用户可一键重试（不需重新上传），保留当前 `docId` 和已上传的招标文件
+  - 部分 LLM 响应中已成功填写的字段应保留，重试时只填写仍为空的字段
+  - 重试时页面保持在同一 `docId`，不刷新 OnlyOffice（避免闪烁）
+  - 如果 LLM 完全无响应（网络/API 错误），提示用户检查网络后重试
 
 ### Verification
 
@@ -375,8 +385,8 @@ Do not proceed to implementation until the above three questions are answered fr
 6. Phase 6 — template filler
 7. Phase 7 — API wiring
 8. Phase 8 — frontend wiring
-9. Phase 9 — workflow doc
-10. Phase 10 — integration tests
+9. Phase 10 — integration tests
+10. Phase 9 — workflow doc（可选，不阻塞功能交付）
 11. Phase 12 — final verification
 
 ---

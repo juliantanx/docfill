@@ -4,6 +4,8 @@
 
 **Goal:** 将 AI 自动填写从一次性阻塞调用改为 SSE 流式进度 + chunk 级断点续传 + 取消/继续 + 结果校验，切换 deepseek-v4-flash 模型提速。
 
+> **注意：** 本计划基于 ai-bidding-assistant 的 doc-service。如当前方向为独立的 docfill 通用工具（参见 `2026-05-12-docfill-plan.md`），则本计划的 SSE 流式 + chunk 续传 + 取消/继续机制应整合进 Plan 3 的 `ai_filler.py`，而非在本计划中独立实现。
+
 **Architecture:** 后端新增 SSE 流式端点，按 chunk 粒度推送进度并保存中间结果到 `fill_progress`/`partial_fields`；前端用 `fetch + ReadableStream` 消费 SSE，按钮状态机驱动取消/继续；LLM 返回值做占位符过滤。
 
 **Tech Stack:** FastAPI StreamingResponse, SQLAlchemy JSON columns, fetch ReadableStream, React state machine
@@ -33,11 +35,13 @@
 
 - [ ] **Step 1: 添加数据库列**
 
-在 `Document` 类的 `fields` 列之后添加两列：
+在 `Document` 类的 `fields` 列之后添加两列。注意：SQLAlchemy 普通 `JSON`
+不会跟踪 dict 原地修改；若当前模型没有使用 mutable JSON，需要先引入
+`from sqlalchemy.ext.mutable import MutableDict`，否则取消/续传标志可能不会入库。
 
 ```python
-    fill_progress = Column(JSON, nullable=True, comment="AI 填写进度：{chunk_index, total_chunks, cancelled: bool}")
-    partial_fields = Column(JSON, nullable=True, comment="已填写的部分字段结果，续传时合并")
+    fill_progress = Column(MutableDict.as_mutable(JSON), nullable=True, comment="AI 填写进度：{chunk_index, total_chunks, cancelled: bool}")
+    partial_fields = Column(MutableDict.as_mutable(JSON), nullable=True, comment="已填写的部分字段结果，续传时合并")
 ```
 
 同时修改 `status` 列的 comment，添加 `ai_paused`：
@@ -181,9 +185,10 @@ class LLMService:
         return merged_result
 ```
 
-> **重要**：SSE 端点必须通过 `match_fields` 的 `on_chunk_done` 回调来推送进度和保存中间结果，
-> 而不是绕过 `match_fields` 直接调用 `_call_llm` 私有方法。如果 `match_fields` 的接口不满足需求，
-> 应扩展 `match_fields` 而不是在端点层重新实现 LLM 调用循环。
+> **重要**：本旧计划仅作为代码复用参考。若在旧 `doc-service` 中实施，应优先扩展 `match_fields`
+> 让它返回可迭代的 chunk 结果或暴露明确的 public chunk API；不要在端点层直接调用 `_call_llm`
+> 私有方法。若采用 Plan 3 的独立 `docfill` 方向，则以 `ai_filler.py` 的 public `fill_stream`
+> 为准。
 
 - [ ] **Step 2: Commit**
 
@@ -240,9 +245,7 @@ async def cancel_ai_fill(
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"文档不存在: {doc_id}")
 
-    if doc.fill_progress is None:
-        doc.fill_progress = {}
-    doc.fill_progress["cancelled"] = True
+    doc.fill_progress = {**(doc.fill_progress or {}), "cancelled": True}
     db.commit()
     return {"message": "取消请求已提交，AI 将在当前步骤完成后暂停"}
 ```
@@ -291,12 +294,12 @@ async def trigger_ai_fill_stream(
     # 清除之前的取消标志（数据库中）
     doc.fill_progress = None if not resume else doc.fill_progress
     if doc.fill_progress:
-        doc.fill_progress["cancelled"] = False
+        doc.fill_progress = {**doc.fill_progress, "cancelled": False}
 
     def generate():
-        gen_db = next(get_db())
-        # 注意：在 SSE generator 中无法使用 FastAPI 依赖注入，
-        # 必须手动管理会话生命周期。确保在 finally 中关闭。
+        gen_db = SessionLocal()
+        # 注意：在 SSE generator 中无法使用 FastAPI 依赖注入（get_db() 是 generator，
+        # next() 只执行到第一个 yield，finally 块不会执行），必须用 SessionLocal() 手动创建会话。
         try:
             # === 续传逻辑：读取已有进度 ===
             start_chunk = 0
@@ -307,7 +310,15 @@ async def trigger_ai_fill_stream(
                 progress = doc.fill_progress
                 start_chunk = progress.get("chunk_index", 0)
                 merged_result = doc.partial_fields or {}
+                # 清除取消标志（续传时清除，不在 SSE 流中清除，避免连续取消请求丢失）
+                if doc.fill_progress:
+                    doc.fill_progress = {**doc.fill_progress, "cancelled": False}
+                    gen_db.commit()
                 # 重新分析字段（必须与之前一致）
+                # 风险：续传时重新分析字段依赖字段 ID 稳定性。如果 OnlyOffice 回调
+                # 在 ai_filling 期间修改了模板文件，字段 ID 可能变化导致 partial_fields
+                # 无法匹配。缓解：在 ai_filling 状态下 OnlyOffice 应设为只读模式，
+                # 防止回调覆盖模板文件。
                 analyzer = TemplateAnalyzer()
                 template_fields = analyzer.analyze(template_file_path)
                 yield _sse_event({
@@ -374,31 +385,10 @@ async def trigger_ai_fill_stream(
             llm_end_percent = 75
             llm_range = llm_end_percent - llm_start_percent
 
-            def on_chunk_done(chunk_index: int, total: int, current_result: dict[str, str]):
-                """每个 chunk 完成后的回调：推送进度 + 保存中间结果"""
-                nonlocal merged_result
-                merged_result = current_result
-
-                # 计算进度
-                percent = llm_start_percent + int((chunk_index + 1) / total * llm_range)
-                filled_so_far = sum(1 for v in current_result.values() if v)
-
-                # 推送 SSE
-                # 注意：此回调在 LLM 循环内同步调用，yield 需通过外层处理
-                # 这里仅更新数据库，SSE 由外层循环推送
-
-                # 保存进度到数据库（供续传）
-                current_doc = gen_db.query(Document).filter(Document.id == doc_id).first()
-                if current_doc:
-                    current_doc.fill_progress = {
-                        "chunk_index": chunk_index + 1,
-                        "total_chunks": total,
-                        "percent": percent,
-                    }
-                    current_doc.partial_fields = current_result
-                    gen_db.commit()
-
             # 逐 chunk 调用 LLM，手动控制循环以支持取消
+            # 注意：不要直接调用 _call_llm 私有方法。这里应先将 llm_service 扩展出
+            # public iter_chunk_matches(...)，由它负责 chunk 调用、校验和合并；端点只负责
+            # SSE 输出、取消检查和持久化进度。
             for chunk_idx in range(start_chunk, total_chunks):
                 # 检查取消标志
                 # 查询数据库检查取消标志
@@ -415,10 +405,7 @@ async def trigger_ai_fill_stream(
                         }
                         paused_doc.partial_fields = merged_result
                         gen_db.commit()
-                    # 清除取消标志
-                    if paused_doc.fill_progress:
-                        paused_doc.fill_progress["cancelled"] = False
-                        gen_db.commit()
+                    # 不清除 cancelled 标志——续传请求到达时才清除，避免连续取消请求丢失
                     yield _sse_event({
                         "step": "cancelled",
                         "message": "AI 填写已暂停",

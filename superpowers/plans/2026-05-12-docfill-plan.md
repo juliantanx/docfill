@@ -2,18 +2,20 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 在 `~/WebstormProjects/docfill/` 构建通用 AI 文档填写工具，用户上传任意 Word 文档，AI 自动识别并填写字段，支持参考文档辅助和无参考自填两种模式。
+**Goal:** 在 `E:\WebstormProjects\docfill\` 构建通用 AI 文档填写工具，用户上传任意 Word 文档，AI 自动识别并填写字段，支持参考文档辅助和无参考自填两种模式。
 
 **Architecture:** 全栈重写，后端 FastAPI（复用 doc-service 的 word_parser / template_analyzer / template_filler / onlyoffice_service，重写 ai_filler 为通用版本），前端 Next.js 14 App Router（完全新设计，消费级 UI）。两者通过 REST + SSE 通信，OnlyOffice Docker 提供文档预览。
 
 **Tech Stack:** Python 3.11+ / FastAPI / PostgreSQL / SQLAlchemy 2.0 / python-docx，Next.js 14 / TypeScript / Tailwind CSS / shadcn/ui / Framer Motion，OnlyOffice Document Server 8.x (Docker)
+
+> **前置计划：** 本计划从 ai-bidding-assistant 的 doc-service 演化而来。`2026-05-09-ai-template-fill.md` 和 `2026-05-10-ai-fill-optimization.md` 中的 SSE 流式、chunk 级续传、取消/继续机制已整合到本计划的 `ai_filler.py` 和前端实现中。如本计划为当前方向，Plan 1/2 标记为仅代码复用参考。
 
 ---
 
 ## 文件结构
 
 ```
-~/WebstormProjects/docfill/
+E:\WebstormProjects\docfill\
 ├── backend/
 │   ├── app/
 │   │   ├── api/v1/documents.py       # 全部文档端点
@@ -73,53 +75,45 @@
 ## Task 1: 项目脚手架
 
 **Files:**
-- Create: `~/WebstormProjects/docfill/` (整个目录)
+- Create: `E:\WebstormProjects\docfill\` (整个目录)
 
 - [ ] **Step 1: 创建目录并初始化 git**
 
-```bash
-mkdir -p ~/WebstormProjects/docfill
-cd ~/WebstormProjects/docfill
+```powershell
+New-Item -ItemType Directory -Force E:\WebstormProjects\docfill | Out-Null
+Set-Location E:\WebstormProjects\docfill
 git init
 ```
 
 - [ ] **Step 2: 创建后端目录结构**
 
-```bash
-cd ~/WebstormProjects/docfill
-mkdir -p backend/app/{api/v1,core,models,schemas,services}
-mkdir -p backend/tests
-touch backend/app/__init__.py
-touch backend/app/api/__init__.py
-touch backend/app/api/v1/__init__.py
-touch backend/app/core/__init__.py
-touch backend/app/models/__init__.py
-touch backend/app/schemas/__init__.py
-touch backend/app/services/__init__.py
-touch backend/tests/__init__.py
+```powershell
+Set-Location E:\WebstormProjects\docfill
+New-Item -ItemType Directory -Force backend/app/api/v1, backend/app/core, backend/app/models, backend/app/schemas, backend/app/services, backend/tests | Out-Null
+New-Item -ItemType File -Force backend/app/__init__.py, backend/app/api/__init__.py, backend/app/api/v1/__init__.py, backend/app/core/__init__.py, backend/app/models/__init__.py, backend/app/schemas/__init__.py, backend/app/services/__init__.py, backend/tests/__init__.py | Out-Null
 ```
 
 - [ ] **Step 3: 创建前端目录结构（使用 create-next-app）**
 
-```bash
-cd ~/WebstormProjects/docfill
-npx create-next-app@14 frontend \
-  --typescript \
-  --tailwind \
-  --eslint \
-  --app \
-  --no-src-dir \
+```powershell
+Set-Location E:\WebstormProjects\docfill
+npx create-next-app@14 frontend `
+  --typescript `
+  --tailwind `
+  --eslint `
+  --app `
+  --no-src-dir `
   --import-alias "@/*"
 # create-next-app 会初始化自己的 .git，必须删除以避免嵌套 git 仓库
-rm -rf frontend/.git
+Remove-Item -Recurse -Force frontend/.git
 ```
 
 预期输出：`Success! Created frontend at .../docfill/frontend`
 
 - [ ] **Step 4: 安装前端额外依赖**
 
-```bash
-cd ~/WebstormProjects/docfill/frontend
+```powershell
+Set-Location E:\WebstormProjects\docfill\frontend
 npm install framer-motion
 npx shadcn@latest init --defaults
 npx shadcn@latest add button dialog progress badge scroll-area separator
@@ -128,8 +122,8 @@ npm install --save-dev @testing-library/react @testing-library/jest-dom jest jes
 
 - [ ] **Step 5: 创建根 .gitignore**
 
-```bash
-cat > ~/WebstormProjects/docfill/.gitignore << 'EOF'
+```powershell
+@'
 # Python
 backend/.venv/
 backend/__pycache__/
@@ -147,13 +141,13 @@ frontend/.env.local
 # General
 .DS_Store
 *.log
-EOF
+'@ | Set-Content -Encoding UTF8 E:\WebstormProjects\docfill\.gitignore
 ```
 
 - [ ] **Step 6: 初始提交**
 
-```bash
-cd ~/WebstormProjects/docfill
+```powershell
+Set-Location E:\WebstormProjects\docfill
 git add .gitignore
 git commit -m "chore: 初始化 docfill 项目"
 ```
@@ -172,8 +166,8 @@ git commit -m "chore: 初始化 docfill 项目"
 
 - [ ] **Step 1: 创建 requirements.txt**
 
-```bash
-cat > ~/WebstormProjects/docfill/backend/requirements.txt << 'EOF'
+```powershell
+@'
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 sqlalchemy==2.0.48
@@ -188,13 +182,13 @@ httpx>=0.28.0
 psycopg[binary]>=3.1
 pytest>=8.0
 pytest-asyncio>=0.23
-EOF
+'@ | Set-Content -Encoding UTF8 E:\WebstormProjects\docfill\backend\requirements.txt
 ```
 
 - [ ] **Step 2: 创建 .env.example**
 
-```bash
-cat > ~/WebstormProjects/docfill/backend/.env.example << 'EOF'
+```powershell
+@'
 # 数据库（开发用 SQLite，生产换 postgresql+psycopg://）
 DATABASE_URL=sqlite:///./docfill.db
 
@@ -210,8 +204,8 @@ LLM_MODEL=gpt-4o-mini
 
 # 服务配置
 HOST_URL=http://host.docker.internal:8002
-EOF
-cp ~/WebstormProjects/docfill/backend/.env.example ~/WebstormProjects/docfill/backend/.env
+'@ | Set-Content -Encoding UTF8 E:\WebstormProjects\docfill\backend\.env.example
+Copy-Item E:\WebstormProjects\docfill\backend\.env.example E:\WebstormProjects\docfill\backend\.env
 ```
 
 - [ ] **Step 3: 创建 config.py**
@@ -323,18 +317,16 @@ router.include_router(onlyoffice.router, prefix="/onlyoffice", tags=["onlyoffice
 
 - [ ] **Step 8: 安装依赖并验证启动**
 
-```bash
-cd ~/WebstormProjects/docfill/backend
+```powershell
+Set-Location E:\WebstormProjects\docfill\backend
 python -m venv .venv
-source .venv/bin/activate
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 # 先创建空的 documents.py 和 onlyoffice.py 占位
-touch app/api/v1/documents.py app/api/v1/onlyoffice.py
+New-Item -ItemType File -Force app/api/v1/documents.py, app/api/v1/onlyoffice.py | Out-Null
 # documents.py 最小内容
-echo 'from fastapi import APIRouter
-router = APIRouter()' > app/api/v1/documents.py
-echo 'from fastapi import APIRouter
-router = APIRouter()' > app/api/v1/onlyoffice.py
+"from fastapi import APIRouter`nrouter = APIRouter()" | Set-Content -Encoding UTF8 app/api/v1/documents.py
+"from fastapi import APIRouter`nrouter = APIRouter()" | Set-Content -Encoding UTF8 app/api/v1/onlyoffice.py
 uvicorn app.main:app --port 8002 --reload
 ```
 
@@ -342,8 +334,8 @@ uvicorn app.main:app --port 8002 --reload
 
 - [ ] **Step 9: 提交**
 
-```bash
-cd ~/WebstormProjects/docfill
+```powershell
+Set-Location E:\WebstormProjects\docfill
 git add backend/
 git commit -m "feat: 后端核心基础设施（config、database、main）"
 ```
@@ -363,6 +355,7 @@ git commit -m "feat: 后端核心基础设施（config、database、main）"
 import uuid
 from datetime import datetime
 from sqlalchemy import Column, DateTime, JSON, String, Text, func
+from sqlalchemy.ext.mutable import MutableDict, MutableList
 from app.core.database import Base
 
 
@@ -373,12 +366,13 @@ class Document(Base):
     # 开发用 String(36) 存 UUID；生产 PostgreSQL 建议改用 UUID 类型
     original_filename = Column(String(512), nullable=False)
     file_path = Column(String(1024), nullable=False)
-    # parsing | ready | filling | filled | error
+    # parsing | ready | filling | paused | filled | error
     status = Column(String(32), nullable=False, default="parsing")
-    fields = Column(JSON, nullable=True)        # list[FieldDict]
-    outline = Column(JSON, nullable=True)       # list[OutlineNode]
-    references = Column(JSON, nullable=True)    # list[{doc_id, filename, file_path, text}]
-    partial_fields = Column(JSON, nullable=True) # 续传时的已填字段
+    fields = Column(MutableList.as_mutable(JSON), nullable=True)        # list[FieldDict]
+    outline = Column(MutableList.as_mutable(JSON), nullable=True)       # list[OutlineNode]
+    references = Column(MutableList.as_mutable(JSON), nullable=True)    # list[{doc_id, filename, file_path, text}]
+    fill_progress = Column(MutableDict.as_mutable(JSON), nullable=True, comment="AI 填写进度：{chunk_index, total_chunks, cancelled: bool}")
+    partial_fields = Column(MutableDict.as_mutable(JSON), nullable=True, comment="已填写的部分字段结果，续传时合并")
     error_message = Column(Text, nullable=True)
     onlyoffice_doc_key = Column(String(255), nullable=True, index=True)
     # 不设 unique=True：文档重新处理时需要更新 doc_key，旧 key 会被覆盖；
@@ -438,9 +432,9 @@ class EditorTokenResponse(BaseModel):
 
 - [ ] **Step 3: 建表（SQLite 开发环境）**
 
-```bash
-cd ~/WebstormProjects/docfill/backend
-source .venv/bin/activate
+```powershell
+Set-Location E:\WebstormProjects\docfill\backend
+.\.venv\Scripts\Activate.ps1
 python -c "
 from app.core.database import Base, engine
 from app.models.document import Document
@@ -453,8 +447,8 @@ print('表已创建')
 
 - [ ] **Step 4: 提交**
 
-```bash
-cd ~/WebstormProjects/docfill
+```powershell
+Set-Location E:\WebstormProjects\docfill
 git add backend/app/models/ backend/app/schemas/
 git commit -m "feat: Document 数据模型和 Pydantic schemas"
 ```
@@ -472,16 +466,16 @@ git commit -m "feat: Document 数据模型和 Pydantic schemas"
 
 - [ ] **Step 1: 复制 word_parser.py**
 
-```bash
-cp ~/WebstormProjects/ai-bidding-assistant\(refactor\)/doc-service/app/services/word_parser.py \
-   ~/WebstormProjects/docfill/backend/app/services/word_parser.py
+```powershell
+Copy-Item "E:\WebstormProjects\ai-bidding-assistant(refactor)\doc-service\app\services\word_parser.py" `
+  "E:\WebstormProjects\docfill\backend\app\services\word_parser.py"
 ```
 
 - [ ] **Step 2: 复制并通用化 template_analyzer.py**
 
-```bash
-cp ~/WebstormProjects/ai-bidding-assistant\(refactor\)/doc-service/app/services/template_analyzer.py \
-   ~/WebstormProjects/docfill/backend/app/services/template_analyzer.py
+```powershell
+Copy-Item "E:\WebstormProjects\ai-bidding-assistant(refactor)\doc-service\app\services\template_analyzer.py" `
+  "E:\WebstormProjects\docfill\backend\app\services\template_analyzer.py"
 ```
 
 打开 `backend/app/services/template_analyzer.py`，将 `INLINE_PAREN_PATTERN` 替换为更通用的模式（原版只匹配特定招投标词汇）：
@@ -495,9 +489,9 @@ INLINE_PAREN_PATTERN = re.compile(
 
 - [ ] **Step 3: 复制 template_filler.py**
 
-```bash
-cp ~/WebstormProjects/ai-bidding-assistant\(refactor\)/doc-service/app/services/template_filler.py \
-   ~/WebstormProjects/docfill/backend/app/services/template_filler.py
+```powershell
+Copy-Item "E:\WebstormProjects\ai-bidding-assistant(refactor)\doc-service\app\services\template_filler.py" `
+  "E:\WebstormProjects\docfill\backend\app\services\template_filler.py"
 ```
 
 - [ ] **Step 4: 写测试 — template_analyzer**
@@ -555,9 +549,9 @@ def test_dedup(tmp_path):
 
 - [ ] **Step 5: 运行测试，确认通过**
 
-```bash
-cd ~/WebstormProjects/docfill/backend
-source .venv/bin/activate
+```powershell
+Set-Location E:\WebstormProjects\docfill\backend
+.\.venv\Scripts\Activate.ps1
 pytest tests/test_template_analyzer.py -v
 ```
 
@@ -624,7 +618,7 @@ def test_empty_value_skipped(tmp_path):
 
 - [ ] **Step 7: 运行测试**
 
-```bash
+```powershell
 pytest tests/test_template_filler.py -v
 ```
 
@@ -632,11 +626,11 @@ pytest tests/test_template_filler.py -v
 
 - [ ] **Step 8: 提交**
 
-```bash
-cd ~/WebstormProjects/docfill
-git add backend/app/services/word_parser.py \
-        backend/app/services/template_analyzer.py \
-        backend/app/services/template_filler.py \
+```powershell
+Set-Location E:\WebstormProjects\docfill
+git add backend/app/services/word_parser.py `
+        backend/app/services/template_analyzer.py `
+        backend/app/services/template_filler.py `
         backend/tests/
 git commit -m "feat: 复用并通用化 word_parser / template_analyzer / template_filler"
 ```
@@ -683,13 +677,24 @@ def _make_stream_chunks_across_boundary(json_text: str, split_at: int) -> list:
 
 
 def _collect_events(gen) -> list[dict]:
+    """解析 SSE 生成器输出为事件列表。处理多行 SSE 块格式：event: xxx\ndata: yyy\n\n"""
     events = []
-    for line in gen:
-        if line.startswith("event:"):
-            parts = line.strip().split("\n")
-            event_type = parts[0].replace("event: ", "")
-            data = json.loads(parts[1].replace("data: ", ""))
-            events.append({"type": event_type, "data": data})
+    buffer = ""
+    for chunk in gen:
+        buffer += chunk
+        while "\n\n" in buffer:
+            block, buffer = buffer.split("\n\n", 1)
+            lines = block.strip().split("\n")
+            event_type = None
+            data_line = None
+            for line in lines:
+                if line.startswith("event: "):
+                    event_type = line[7:].strip()
+                elif line.startswith("data: "):
+                    data_line = line[6:].strip()
+            if event_type and data_line:
+                data = json.loads(data_line)
+                events.append({"type": event_type, "data": data})
     return events
 
 
@@ -774,12 +779,50 @@ def test_fill_cross_chunk_json():
     filled = [e for e in events if e["type"] == "field_filled"]
     assert len(filled) == 1
     assert filled[0]["data"]["value"] == "测试值"
-```
+
+
+def test_chunk_merge_last_nonempty_wins():
+    """多个 chunk 的结果合并时，后一个有效值覆盖前一个有效但可能错误的值。"""
+    mock_client = MagicMock()
+    # First chunk returns a plausible but wrong value for f1
+    call1 = iter([
+        _make_stream_chunk('{"id": "f1", "value": "李四"}\n'),
+        _make_stream_chunk('{"id": "f2", "value": "答案A"}\n'),
+    ])
+    # Second chunk returns a later, more relevant value for f1
+    call2 = iter([_make_stream_chunk('{"id": "f1", "value": "张三"}\n')])
+    mock_client.chat.completions.create.side_effect = [call1, call2]
+
+    filler = AiFiller(client=mock_client)
+    # 用短文本但设 max_chars 很小来强制分块
+    filler._split_text = lambda text, max_chars=10: [text[:10], text[10:]] if len(text) > 10 else [text]
+    events = _collect_events(filler.fill_stream(
+        fields=[{"id": "f1", "label": "姓名"}, {"id": "f2", "label": "第一题"}],
+        document_text="这是一个足够长的文档文本，用于强制分块处理以测试合并逻辑",
+        reference_text=None,
+    ))
+
+    filled = [e for e in events if e["type"] == "field_filled"]
+    f1_events = [e for e in filled if e["data"]["id"] == "f1"]
+    assert len(f1_events) >= 1
+    assert f1_events[-1]["data"]["value"] == "张三"
+
+
+def test_validate_value_filters_placeholders():
+    """_validate_value 过滤占位符和空值。"""
+    assert AiFiller._validate_value("") == ""
+    assert AiFiller._validate_value("无") == ""
+    assert AiFiller._validate_value("N/A") == ""
+    assert AiFiller._validate_value("暂无") == ""
+    assert AiFiller._validate_value("-") == ""
+    assert AiFiller._validate_value("null") == ""
+    assert AiFiller._validate_value("张三") == "张三"
+    assert AiFiller._validate_value("  有效值  ") == "有效值"
 
 - [ ] **Step 2: 运行测试，确认失败**
 
-```bash
-cd ~/WebstormProjects/docfill/backend
+```powershell
+Set-Location E:\WebstormProjects\docfill\backend
 pytest tests/test_ai_filler.py -v
 ```
 
@@ -806,7 +849,7 @@ logger = logging.getLogger(__name__)
 _WITH_REF_SYSTEM = "你是一个文档填写助手，根据参考文档内容准确填写目标文档字段。"
 
 _WITH_REF_USER = """参考文档内容：
-{reference_text}
+{text}
 
 待填字段列表（JSON 数组，每项含 id 和 label）：
 {fields_json}
@@ -820,7 +863,7 @@ _WITH_REF_USER = """参考文档内容：
 _NO_REF_SYSTEM = "你是一个智能文档填写助手，能够分析文档内容并自动填写字段。"
 
 _NO_REF_USER = """文档全文：
-{document_text}
+{text}
 
 待填字段列表（JSON 数组，每项含 id 和 label）：
 {fields_json}
@@ -835,8 +878,16 @@ _NO_REF_USER = """文档全文：
 只返回 JSON 行，不要其他文字。"""
 
 
+PLACEHOLDER_VALUES = {"无", "n/a", "暂无", "待定", "-", "null", "undefined", "xxx", "不适用", "不存在", "tbd", "暂无信息"}
+
+
 class AiFiller:
-    """通用 AI 文档字段填写器。"""
+    """通用 AI 文档字段填写器。
+
+    支持 chunk 级分块调用 LLM + "last non-empty validated wins" 合并策略。
+    长文档按段落边界分块，每个 chunk 独立调用 LLM，后一个 chunk 的有效值
+    覆盖前一个 chunk 的空值或占位符值。
+    """
 
     def __init__(self, client: OpenAI | None = None):
         self.client = client or OpenAI(
@@ -863,100 +914,158 @@ class AiFiller:
             chunks.append(current)
         return chunks
 
+    @staticmethod
+    def _validate_value(value: str) -> str:
+        """校验 LLM 返回值，过滤空值和占位符。有效值返回 stripped 版本，无效返回空字符串。"""
+        if not value or len(value.strip()) <= 1:
+            return ""
+        stripped = value.strip()
+        if stripped.lower() in {v.lower() for v in PLACEHOLDER_VALUES}:
+            return ""
+        return stripped
+
+    def _call_llm_for_chunk(
+        self, system: str, user: str, chunk_text: str, fields_json: str
+    ) -> list[dict]:
+        """对单个 chunk 调用 LLM，解析返回的 JSON 行列表。"""
+        user_filled = user.format(
+            text=chunk_text,
+            fields_json=fields_json,
+        )
+        stream = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_filled},
+            ],
+            temperature=0.1,
+            stream=True,
+        )
+
+        results = []
+        buffer = ""
+        for chunk in stream:
+            delta = chunk.choices[0].delta.content or ""
+            buffer += delta
+            while "\n" in buffer:
+                line, buffer = buffer.split("\n", 1)
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    item = json.loads(line)
+                    results.append(item)
+                except json.JSONDecodeError:
+                    logger.debug("跳过无效 JSON 行: %s", line)
+        # 处理模型末尾没有换行的最后一条 JSON 行。
+        tail = buffer.strip()
+        if tail:
+            try:
+                results.append(json.loads(tail))
+            except json.JSONDecodeError:
+                logger.debug("跳过无效 JSON 尾行: %s", tail)
+        return results
+
     def fill_stream(
         self,
         fields: list[dict],
         document_text: str,
         reference_text: str | None = None,
+        start_chunk: int = 0,
+        partial_result: dict[str, str] | None = None,
     ) -> Generator[str, None, None]:
         """流式填写字段，yield SSE 格式字符串。
+
+        支持 chunk 级分块调用 + "last non-empty validated wins" 合并策略。
+        长文档按段落边界分块，每个 chunk 独立调用 LLM，后一个 chunk 的有效值
+        覆盖前一个 chunk 的空值或占位符值。
 
         Args:
             fields: 字段列表，每项须含 id 和 label。
             document_text: 目标文档全文（用于无参考模式）。
             reference_text: 参考文档文本（有参考模式），None 表示无参考。
+            start_chunk: 续传时从第几个 chunk 开始（默认 0）。
+            partial_result: 续传时已有的部分字段结果。
 
         Yields:
             SSE 事件字符串，格式为 "event: <type>\\ndata: <json>\\n\\n"
         """
         total = len(fields)
-        filled_count = 0
         fields_json = json.dumps(
             [{"id": f["id"], "label": f["label"]} for f in fields],
             ensure_ascii=False,
             indent=None,
         )
 
+        # 选择 prompt 模板和文本源
         if reference_text:
             system = _WITH_REF_SYSTEM
-            # 分块处理长参考文本，而非硬截断
-            chunks = self._split_text(reference_text)
-            user = _WITH_REF_USER.format(
-                reference_text=chunks[0] if len(chunks) == 1 else "\n\n---\n\n".join(chunks[:3]),
-                fields_json=fields_json,
-            )
+            text_source = reference_text
         else:
             system = _NO_REF_SYSTEM
-            chunks = self._split_text(document_text)
-            user = _NO_REF_USER.format(
-                document_text=chunks[0] if len(chunks) == 1 else "\n\n---\n\n".join(chunks[:3]),
-                fields_json=fields_json,
-            )
+            text_source = document_text
+
+        chunks = self._split_text(text_source)
+        total_chunks = len(chunks)
+
+        # 合并结果初始化：续传时用已有结果，否则全空
+        merged_result: dict[str, str] = partial_result.copy() if partial_result else {f["id"]: "" for f in fields}
+        # 记录已发过 field_filled 事件的字段，避免重复发送
+        emitted_fields: set[str] = set(merged_result.keys() if partial_result else set())
 
         try:
-            stream = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                temperature=0.1,
-                stream=True,
-            )
+            for chunk_idx in range(start_chunk, total_chunks):
+                chunk_text = chunks[chunk_idx]
 
-            buffer = ""
-            for chunk in stream:
-                delta = chunk.choices[0].delta.content or ""
-                buffer += delta
+                # 逐 chunk 调用 LLM
+                chunk_results = self._call_llm_for_chunk(system, _WITH_REF_USER if reference_text else _NO_REF_USER, chunk_text, fields_json)
 
-                while "\n" in buffer:
-                    line, buffer = buffer.split("\n", 1)
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        item = json.loads(line)
-                    except json.JSONDecodeError:
-                        logger.debug("跳过无效 JSON 行: %s", line)
-                        continue
-
+                # 合并："last non-empty validated wins"
+                for item in chunk_results:
                     field_id = item.get("id", "")
                     value = item.get("value", "")
                     requires_input = bool(item.get("requires_input", False))
-                    label = next(
-                        (f["label"] for f in fields if f["id"] == field_id),
-                        field_id,
-                    )
+                    validated = self._validate_value(value)
+
+                    if field_id not in merged_result:
+                        continue
 
                     if requires_input:
-                        payload = json.dumps(
-                            {"id": field_id, "label": label, "requires_input": True},
-                            ensure_ascii=False,
-                        )
-                        yield f"event: field_requires_input\ndata: {payload}\n\n"
-                    else:
-                        filled_count += 1
-                        payload = json.dumps(
-                            {"id": field_id, "label": label, "value": value, "requires_input": False},
-                            ensure_ascii=False,
-                        )
-                        yield f"event: field_filled\ndata: {payload}\n\n"
+                        # 需要用户输入的字段，发事件（只发一次）
+                        if field_id not in emitted_fields:
+                            label = next((f["label"] for f in fields if f["id"] == field_id), field_id)
+                            payload = json.dumps(
+                                {"id": field_id, "label": label, "requires_input": True},
+                                ensure_ascii=False,
+                            )
+                            yield f"event: field_requires_input\ndata: {payload}\n\n"
+                            emitted_fields.add(field_id)
+                    elif validated:
+                        # last non-empty validated wins：后续 chunk 的有效值覆盖之前结果。
+                        old_value = merged_result[field_id]
+                        merged_result[field_id] = validated
+                        # 只有值变化时才发事件
+                        if field_id not in emitted_fields or old_value != validated:
+                            label = next((f["label"] for f in fields if f["id"] == field_id), field_id)
+                            payload = json.dumps(
+                                {"id": field_id, "label": label, "value": validated, "requires_input": False},
+                                ensure_ascii=False,
+                            )
+                            yield f"event: field_filled\ndata: {payload}\n\n"
+                            emitted_fields.add(field_id)
 
-                    pct = int(filled_count / total * 100) if total > 0 else 0
-                    progress = json.dumps(
-                        {"filled": filled_count, "total": total, "percentage": pct}
-                    )
-                    yield f"event: progress\ndata: {progress}\n\n"
+                # chunk 级进度事件
+                filled_count = sum(1 for v in merged_result.values() if self._validate_value(v))
+                pct = int(filled_count / total * 100) if total > 0 else 0
+                progress = json.dumps({
+                    "filled": filled_count,
+                    "total": total,
+                    "percentage": pct,
+                    "chunk": chunk_idx + 1,
+                    "chunk_index": chunk_idx + 1,
+                    "total_chunks": total_chunks,
+                })
+                yield f"event: progress\ndata: {progress}\n\n"
 
         except Exception as e:
             logger.error("AI 填写失败: %s", e)
@@ -972,16 +1081,16 @@ class AiFiller:
 
 - [ ] **Step 4: 运行测试，确认通过**
 
-```bash
+```powershell
 pytest tests/test_ai_filler.py -v
 ```
 
-预期：3 tests passed
+预期：6 tests passed
 
 - [ ] **Step 5: 提交**
 
-```bash
-cd ~/WebstormProjects/docfill
+```powershell
+Set-Location E:\WebstormProjects\docfill
 git add backend/app/services/ai_filler.py backend/tests/test_ai_filler.py
 git commit -m "feat: 通用 AI 文档填写服务（有参考/无参考双模式 SSE 流）"
 ```
@@ -995,18 +1104,18 @@ git commit -m "feat: 通用 AI 文档填写服务（有参考/无参考双模式
 
 - [ ] **Step 1: 复制并调整 onlyoffice_service.py**
 
-```bash
-cp ~/WebstormProjects/ai-bidding-assistant\(refactor\)/doc-service/app/services/onlyoffice_service.py \
-   ~/WebstormProjects/docfill/backend/app/services/onlyoffice_service.py
+```powershell
+Copy-Item "E:\WebstormProjects\ai-bidding-assistant(refactor)\doc-service\app\services\onlyoffice_service.py" `
+  "E:\WebstormProjects\docfill\backend\app\services\onlyoffice_service.py"
 ```
 
 打开文件，将所有 `from app.core.config import settings` 的导入保持不变（路径相同），检查无其他 `doc-service` 专有引用。
 
 - [ ] **Step 2: 验证导入无错误**
 
-```bash
-cd ~/WebstormProjects/docfill/backend
-source .venv/bin/activate
+```powershell
+Set-Location E:\WebstormProjects\docfill\backend
+.\.venv\Scripts\Activate.ps1
 python -c "from app.services.onlyoffice_service import OnlyOfficeService; print('OK')"
 ```
 
@@ -1014,8 +1123,8 @@ python -c "from app.services.onlyoffice_service import OnlyOfficeService; print(
 
 - [ ] **Step 3: 提交**
 
-```bash
-cd ~/WebstormProjects/docfill
+```powershell
+Set-Location E:\WebstormProjects\docfill
 git add backend/app/services/onlyoffice_service.py
 git commit -m "feat: 复用 OnlyOffice 服务"
 ```
@@ -1035,6 +1144,7 @@ git commit -m "feat: 复用 OnlyOffice 服务"
 """文档 CRUD + AI 填写触发端点。"""
 import logging
 import uuid
+import json
 from pathlib import Path
 
 import aiofiles
@@ -1235,23 +1345,36 @@ def get_raw_file(doc_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{doc_id}/ai-fill")
-def trigger_ai_fill(doc_id: str, db: Session = Depends(get_db)):
-    """触发 AI 填写，返回 SSE 流。"""
+def trigger_ai_fill(doc_id: str, resume: bool = False, db: Session = Depends(get_db)):
+    """触发 AI 填写，返回 SSE 流。支持断点续传。"""
     doc = db.get(Document, doc_id)
     if not doc:
         raise HTTPException(404, "文档不存在")
     if not doc.fields:
         raise HTTPException(400, "文档无可填写字段")
 
+    # 续传逻辑：读取已有进度
+    start_chunk = 0
+    partial: dict[str, str] = {}
+    if resume and doc.fill_progress:
+        start_chunk = doc.fill_progress.get("chunk_index", 0)
+        partial = doc.partial_fields or {}
+        # 清除取消标志（续传时清除，不在 SSE 流中清除）
+        doc.fill_progress = {**doc.fill_progress, "cancelled": False}
+        doc.status = "filling"
+        db.commit()
+    else:
+        # 新流程：清除旧进度
+        doc.fill_progress = None
+        doc.partial_fields = None
+        doc.status = "filling"
+        db.commit()
+
     # 合并已有字段（续传：保留已填值）
     fields = list(doc.fields)
-    partial = doc.partial_fields or {}
     for f in fields:
         if f["id"] in partial:
             f["value"] = partial[f["id"]]
-
-    # 只填写还没有值的字段
-    pending_fields = [f for f in fields if not f.get("value")]
 
     document_text = _extract_text(doc.file_path)
     reference_text = None
@@ -1260,63 +1383,93 @@ def trigger_ai_fill(doc_id: str, db: Session = Depends(get_db)):
             r["text"] for r in doc.references if r.get("text")
         )
 
-    doc.status = "filling"
-    db.commit()
-
     def event_stream():
         # SSE generator 中无法使用 FastAPI 依赖注入。
         # 必须手动管理 DB 会话生命周期。
-        partial_update: dict[str, str] = dict(partial)
+        gen_db = SessionLocal()
+        errored = False
+        error_message = None
         try:
             for sse_line in ai_filler.fill_stream(
-                fields=pending_fields,
+                fields=fields,
                 document_text=document_text,
                 reference_text=reference_text or None,
+                start_chunk=start_chunk,
+                partial_result=partial if resume else None,
             ):
                 # 更新 partial_fields 以便续传
                 if sse_line.startswith("event: field_filled"):
-                    import json as _json
                     data_line = sse_line.split("\ndata: ", 1)[1].strip()
-                    item = _json.loads(data_line.split("\n\n")[0])
-                    partial_update[item["id"]] = item["value"]
+                    item = json.loads(data_line.split("\n\n")[0])
+                    partial[item["id"]] = item["value"]
+                elif sse_line.startswith("event: field_requires_input"):
+                    data_line = sse_line.split("\ndata: ", 1)[1].strip()
+                    item = json.loads(data_line.split("\n\n")[0])
+                    partial.setdefault(item["id"], "")
+                elif sse_line.startswith("event: progress"):
+                    data_line = sse_line.split("\ndata: ", 1)[1].strip()
+                    progress = json.loads(data_line.split("\n\n")[0])
+                    progress_doc = gen_db.query(Document).filter(Document.id == doc_id).first()
+                    if progress_doc:
+                        progress_doc.fill_progress = {
+                            "chunk_index": progress.get("chunk_index", 0),
+                            "total_chunks": progress.get("total_chunks", 0),
+                            "cancelled": bool((progress_doc.fill_progress or {}).get("cancelled", False)),
+                        }
+                        progress_doc.partial_fields = dict(partial)
+                        gen_db.commit()
+                elif sse_line.startswith("event: error"):
+                    errored = True
+                    data_line = sse_line.split("\ndata: ", 1)[1].strip()
+                    error_message = json.loads(data_line.split("\n\n")[0]).get("message")
                 yield sse_line
 
-                # 检查取消标志：重新查询数据库状态
-                _check = SessionLocal()
-                try:
-                    _check_doc = _check.get(Document, doc_id)
-                    if _check_doc and _check_doc.status == "ready" and _check_doc.partial_fields:
-                        # 用户已取消，停止 SSE 流
-                        break
-                finally:
-                    _check.close()
+                # 每个 chunk 完成后检查取消标志（fill_progress.cancelled）
+                _check_doc = gen_db.query(Document).filter(Document.id == doc_id).first()
+                if _check_doc and _check_doc.fill_progress and _check_doc.fill_progress.get("cancelled"):
+                    # 保存当前进度
+                    fields_to_save = list(_check_doc.fields or [])
+                    for field in fields_to_save:
+                        field_id = field.get("id")
+                        if field_id in partial:
+                            field["value"] = partial[field_id]
+                            field["status"] = "filled" if partial[field_id] else "empty"
+                    _check_doc.fields = fields_to_save
+                    _check_doc.status = "paused"
+                    _check_doc.partial_fields = dict(partial)
+                    gen_db.commit()
+                    # 不清除 cancelled 标志——续传请求到达时才清除
+                    yield f"event: cancelled\ndata: {json.dumps({'message': 'AI 填写已暂停'})}\n\n"
+                    return
         finally:
             # 无论是否中断，持久化已填字段
-            _db = SessionLocal()
-            try:
-                _doc = _db.get(Document, doc_id)
-                if _doc:
-                    _doc.partial_fields = partial_update
-                    _doc.status = "ready"
-                    _db.commit()
-            finally:
-                _db.close()
+            _doc = gen_db.query(Document).filter(Document.id == doc_id).first()
+            if _doc and _doc.status == "filling":
+                fields_to_save = list(_doc.fields or [])
+                for field in fields_to_save:
+                    field_id = field.get("id")
+                    if field_id in partial:
+                        field["value"] = partial[field_id]
+                        field["status"] = "filled" if partial[field_id] else "empty"
+                _doc.fields = fields_to_save
+                _doc.partial_fields = dict(partial)
+                _doc.status = "error" if errored else "ready"
+                _doc.error_message = error_message
+                gen_db.commit()
+            gen_db.close()
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
-@router.delete("/{doc_id}/ai-fill")
+@router.post("/{doc_id}/ai-fill-cancel")
 def cancel_ai_fill(doc_id: str, db: Session = Depends(get_db)):
-    """取消 AI 填写。设置取消标志，SSE 流会在当前字段完成后停止。"""
+    """取消 AI 填写。设置 fill_progress.cancelled 标志，SSE 流会在当前 chunk 完成后停止。"""
     doc = db.get(Document, doc_id)
     if not doc:
         raise HTTPException(404, "文档不存在")
-    # 保存取消标志到数据库（多 worker 安全）
-    if doc.partial_fields is None:
-        doc.partial_fields = {}
-    doc.status = "ready"
+    doc.fill_progress = {**(doc.fill_progress or {}), "cancelled": True}
     db.commit()
-    return {"success": True}
+    return {"success": True, "message": "取消请求已提交，AI 将在当前步骤完成后暂停"}
 
 
 @router.patch("/{doc_id}/fields/{field_id}")
@@ -1426,7 +1579,8 @@ async def onlyoffice_callback(
             doc = db.query(Document).filter(
                 Document.onlyoffice_doc_key == doc_key
             ).first()
-            if doc:
+            if doc and doc.status not in ("filling", "paused"):
+                # AI 填写期间不覆盖文件，防止字段 ID 失效导致续传失败
                 async with httpx.AsyncClient() as client:
                     response = await client.get(url)
                 with open(doc.file_path, "wb") as f:
@@ -1439,9 +1593,9 @@ async def onlyoffice_callback(
 
 - [ ] **Step 3: 验证 API 文档可访问**
 
-```bash
-cd ~/WebstormProjects/docfill/backend
-source .venv/bin/activate
+```powershell
+Set-Location E:\WebstormProjects\docfill\backend
+.\.venv\Scripts\Activate.ps1
 uvicorn app.main:app --port 8002 --reload
 # 新终端
 curl http://localhost:8002/docs
@@ -1451,8 +1605,8 @@ curl http://localhost:8002/docs
 
 - [ ] **Step 4: 提交**
 
-```bash
-cd ~/WebstormProjects/docfill
+```powershell
+Set-Location E:\WebstormProjects\docfill
 git add backend/app/api/
 git commit -m "feat: 文档 API 端点（上传、解析、AI 填写 SSE、确认、下载）"
 ```
@@ -1591,9 +1745,9 @@ def test_update_field(client, tmp_path, monkeypatch):
 
 - [ ] **Step 3: 运行全部后端测试**
 
-```bash
-cd ~/WebstormProjects/docfill/backend
-source .venv/bin/activate
+```powershell
+Set-Location E:\WebstormProjects\docfill\backend
+.\.venv\Scripts\Activate.ps1
 pytest tests/ -v
 ```
 
@@ -1601,8 +1755,8 @@ pytest tests/ -v
 
 - [ ] **Step 4: 提交**
 
-```bash
-cd ~/WebstormProjects/docfill
+```powershell
+Set-Location E:\WebstormProjects\docfill
 git add backend/tests/
 git commit -m "test: 后端集成测试（上传、字段更新、类型校验）"
 ```
@@ -1621,7 +1775,7 @@ git commit -m "test: 后端集成测试（上传、字段更新、类型校验�
 
 ```typescript
 // frontend/types/document.ts
-export type DocumentStatus = 'parsing' | 'ready' | 'filling' | 'filled' | 'error'
+export type DocumentStatus = 'parsing' | 'ready' | 'filling' | 'paused' | 'filled' | 'error'
 export type FieldStatus = 'empty' | 'filled'
 export type FieldType = 'bracket' | 'blank' | 'table_cell' | 'inline_paren'
 export type AiFillState = 'idle' | 'filling' | 'paused' | 'done'
@@ -1698,12 +1852,18 @@ export interface ErrorEvent {
   message: string
 }
 
+export interface CancelledEvent {
+  type: 'cancelled'
+  message: string
+}
+
 export type AiFillEvent =
   | FieldFilledEvent
   | FieldRequiresInputEvent
   | ProgressEvent
   | DoneEvent
   | ErrorEvent
+  | CancelledEvent
 ```
 
 - [ ] **Step 2: 创建 lib/api.ts**
@@ -1771,7 +1931,7 @@ export const confirmFields = (docId: string) =>
   request(`/api/v1/documents/${docId}/confirm`, { method: 'POST' })
 
 export const cancelAiFill = (docId: string) =>
-  request(`/api/v1/documents/${docId}/ai-fill`, { method: 'DELETE' })
+  request(`/api/v1/documents/${docId}/ai-fill-cancel`, { method: 'POST' })
 
 export const getDownloadUrl = (docId: string) =>
   `${BASE_URL}/api/v1/documents/${docId}/download`
@@ -1794,10 +1954,11 @@ export function connectAiFillStream(
   onEvent: (event: AiFillEvent) => void,
   onDone: () => void,
   onError: (message: string) => void,
+  resume = false,
 ): () => void {
   const controller = new AbortController()
 
-  fetch(`${BASE_URL}/api/v1/documents/${docId}/ai-fill`, {
+  fetch(`${BASE_URL}/api/v1/documents/${docId}/ai-fill${resume ? '?resume=true' : ''}`, {
     method: 'POST',
     signal: controller.signal,
   }).then(async (res) => {
@@ -1903,17 +2064,17 @@ export async function DELETE(req: NextRequest, { params }: { params: { proxy: st
 
 - [ ] **Step 5: 配置环境变量**
 
-```bash
-cat > ~/WebstormProjects/docfill/frontend/.env.local << 'EOF'
+```powershell
+@'
 NEXT_PUBLIC_API_URL=http://localhost:8002
 BACKEND_URL=http://localhost:8002
-EOF
+'@ | Set-Content -Encoding UTF8 E:\WebstormProjects\docfill\frontend\.env.local
 ```
 
 - [ ] **Step 6: 提交**
 
-```bash
-cd ~/WebstormProjects/docfill
+```powershell
+Set-Location E:\WebstormProjects\docfill
 git add frontend/types/ frontend/lib/ frontend/app/api/
 git commit -m "feat: 前端类型定义、API 客户端、SSE 客户端、BFF 代理"
 ```
@@ -2232,8 +2393,8 @@ export default function HomePage() {
 
 - [ ] **Step 5: 验证首页渲染**
 
-```bash
-cd ~/WebstormProjects/docfill/frontend
+```powershell
+Set-Location E:\WebstormProjects\docfill\frontend
 npm run dev -- --port 3001
 # 浏览器访问 http://localhost:3001
 ```
@@ -2242,8 +2403,8 @@ npm run dev -- --port 3001
 
 - [ ] **Step 6: 提交**
 
-```bash
-cd ~/WebstormProjects/docfill
+```powershell
+Set-Location E:\WebstormProjects\docfill
 git add frontend/app/ frontend/components/upload/
 git commit -m "feat: 首页上传入口（深色渐变 UI、拖拽、参考文档、Framer Motion）"
 ```
@@ -2284,7 +2445,7 @@ export default function WorkspacePage({ params }: Props) {
   const router = useRouter()
   const [doc, setDoc] = useState<DocumentInfo | null>(null)
   const [fields, setFields] = useState<DocField[]>([])
-  const [aiFillState, setAiFillState] = useState<'idle' | 'filling' | 'done'>('idle')
+  const [aiFillState, setAiFillState] = useState<'idle' | 'filling' | 'paused' | 'done'>('idle')
   const [progress, setProgress] = useState(0)
   const [pendingInputField, setPendingInputField] = useState<DocField | null>(null)
   const pendingInputFieldsRef = useRef<DocField[]>([])
@@ -2321,6 +2482,9 @@ export default function WorkspacePage({ params }: Props) {
       })
     } else if (event.type === 'progress') {
       setProgress(event.percentage)
+    } else if (event.type === 'cancelled') {
+      setAiFillState('paused')
+      setProgress(0)
     } else if (event.type === 'done') {
       setAiFillState('done')
       setProgress(100)
@@ -2345,11 +2509,25 @@ export default function WorkspacePage({ params }: Props) {
     setAbortFill(() => abort)
   }, [docId, handleAiEvent])
 
+  const resumeAiFill = useCallback(() => {
+    setAiFillState('filling')
+    pendingInputFieldsRef.current = []
+    const abort = connectAiFillStream(
+      docId,
+      handleAiEvent,
+      () => setAiFillState('done'),
+      () => setAiFillState('idle'),
+      true,  // resume = true
+    )
+    setAbortFill(() => abort)
+  }, [docId, handleAiEvent])
+
   const stopAiFill = useCallback(async () => {
-    abortFill?.()
     await cancelAiFill(docId)
-    setAiFillState('idle')
-  }, [abortFill, docId])
+    // 不主动 abort SSE：等待后端在当前 chunk 结束后发 cancelled，
+    // 这样状态会进入 paused，且后端已持久化 chunk_index/partial_fields，可继续续传。
+    setAiFillState('filling')
+  }, [docId])
 
   const handleFieldChange = useCallback(async (fieldId: string, value: string) => {
     await updateField(docId, fieldId, value)
@@ -2417,6 +2595,7 @@ export default function WorkspacePage({ params }: Props) {
           progress={progress}
           onStartFill={startAiFill}
           onStopFill={stopAiFill}
+          onResumeFill={resumeAiFill}
           onFieldChange={handleFieldChange}
         />
       </div>
@@ -2635,10 +2814,11 @@ import AiProgressStream from './AiProgressStream'
 
 interface Props {
   fields: DocField[]
-  aiFillState: 'idle' | 'filling' | 'done'
+  aiFillState: 'idle' | 'filling' | 'paused' | 'done'
   progress: number
   onStartFill: () => void
   onStopFill: () => void
+  onResumeFill: () => void
   onFieldChange: (fieldId: string, value: string) => void
 }
 
@@ -2648,6 +2828,7 @@ export default function AiPanel({
   progress,
   onStartFill,
   onStopFill,
+  onResumeFill,
   onFieldChange,
 }: Props) {
   const filledCount = fields.filter((f) => f.value).length
@@ -2666,21 +2847,29 @@ export default function AiPanel({
 
         {/* AI 填写按钮 */}
         <div className="mt-3">
-          {aiFillState === 'idle' || aiFillState === 'done' ? (
+          {aiFillState === 'filling' ? (
+            <button
+              onClick={onStopFill}
+              className="w-full rounded-lg border border-red-500/50 bg-red-500/10
+                         py-2 text-sm font-medium text-red-400 hover:bg-red-500/20"
+            >
+              取消填写
+            </button>
+          ) : aiFillState === 'paused' ? (
+            <button
+              onClick={onResumeFill}
+              className="w-full rounded-lg bg-gradient-to-r from-amber-600 to-orange-600
+                         py-2 text-sm font-medium text-white hover:opacity-90 active:scale-95"
+            >
+              继续填写
+            </button>
+          ) : (
             <button
               onClick={onStartFill}
               className="w-full rounded-lg bg-gradient-to-r from-violet-600 to-blue-600
                          py-2 text-sm font-medium text-white hover:opacity-90 active:scale-95"
             >
               {aiFillState === 'done' ? '重新 AI 填写' : '⚡ AI 自动填写'}
-            </button>
-          ) : (
-            <button
-              onClick={onStopFill}
-              className="w-full rounded-lg border border-red-500/50 bg-red-500/10
-                         py-2 text-sm font-medium text-red-400 hover:bg-red-500/20"
-            >
-              停止填写
             </button>
           )}
         </div>
@@ -2791,11 +2980,12 @@ export default function PersonalInfoModal({ field, onSubmit, onSkip }: Props) {
 
 - [ ] **Step 7: 验证工作区页面**
 
-```bash
-cd ~/WebstormProjects/docfill/frontend
+```powershell
+Set-Location E:\WebstormProjects\docfill\frontend
 npm run dev -- --port 3001
 # 同时启动后端
-cd ~/WebstormProjects/docfill/backend && uvicorn app.main:app --port 8002 --reload
+Set-Location E:\WebstormProjects\docfill\backend
+uvicorn app.main:app --port 8002 --reload
 # 上传一个 .docx 文件，跳转到工作区 /workspace/<id>
 ```
 
@@ -2803,8 +2993,8 @@ cd ~/WebstormProjects/docfill/backend && uvicorn app.main:app --port 8002 --relo
 
 - [ ] **Step 8: 提交**
 
-```bash
-cd ~/WebstormProjects/docfill
+```powershell
+Set-Location E:\WebstormProjects\docfill
 git add frontend/app/workspace/ frontend/components/workspace/
 git commit -m "feat: 工作区页面（三列布局、AI 面板、OnlyOffice 编辑器、个人信息弹窗）"
 ```
@@ -2962,6 +3152,7 @@ test('shows field count', () => {
       progress={0}
       onStartFill={jest.fn()}
       onStopFill={jest.fn()}
+      onResumeFill={jest.fn()}
       onFieldChange={jest.fn()}
     />,
   )
@@ -2977,6 +3168,7 @@ test('calls onStartFill when AI button clicked', () => {
       progress={0}
       onStartFill={onStart}
       onStopFill={jest.fn()}
+      onResumeFill={jest.fn()}
       onFieldChange={jest.fn()}
     />,
   )
@@ -2992,17 +3184,37 @@ test('shows stop button when filling', () => {
       progress={50}
       onStartFill={jest.fn()}
       onStopFill={jest.fn()}
+      onResumeFill={jest.fn()}
       onFieldChange={jest.fn()}
     />,
   )
-  expect(screen.getByText('停止填写')).toBeInTheDocument()
+  expect(screen.getByText('取消填写')).toBeInTheDocument()
+})
+
+test('shows resume button when paused', () => {
+  const onResume = jest.fn()
+  render(
+    <AiPanel
+      fields={fields}
+      aiFillState="paused"
+      progress={30}
+      onStartFill={jest.fn()}
+      onStopFill={jest.fn()}
+      onResumeFill={onResume}
+      onFieldChange={jest.fn()}
+    />,
+  )
+  const btn = screen.getByText('继续填写')
+  expect(btn).toBeInTheDocument()
+  fireEvent.click(btn)
+  expect(onResume).toHaveBeenCalled()
 })
 ```
 
 - [ ] **Step 5: 运行前端测试**
 
-```bash
-cd ~/WebstormProjects/docfill/frontend
+```powershell
+Set-Location E:\WebstormProjects\docfill\frontend
 npm test
 ```
 
@@ -3010,8 +3222,8 @@ npm test
 
 - [ ] **Step 6: 提交**
 
-```bash
-cd ~/WebstormProjects/docfill
+```powershell
+Set-Location E:\WebstormProjects\docfill
 git add frontend/__tests__/ frontend/jest.config.ts frontend/jest.setup.ts
 git commit -m "test: 前端组件测试（DropZone、PersonalInfoModal、AiPanel）"
 ```
@@ -3120,7 +3332,7 @@ RUN npm run build
 
 FROM node:20-alpine
 WORKDIR /app
-COPY --from=builder /app/.next/standalone .
+COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 ENV PORT=3001
@@ -3142,8 +3354,8 @@ export default nextConfig
 
 - [ ] **Step 5: 提交**
 
-```bash
-cd ~/WebstormProjects/docfill
+```powershell
+Set-Location E:\WebstormProjects\docfill
 git add docker-compose.yml backend/Dockerfile frontend/Dockerfile frontend/next.config.ts
 git commit -m "feat: Docker Compose（PostgreSQL + OnlyOffice + backend + frontend）"
 ```
@@ -3157,23 +3369,24 @@ git commit -m "feat: Docker Compose（PostgreSQL + OnlyOffice + backend + fronte
 
 - [ ] **Step 1: 创建 README**
 
-```bash
-cat > ~/WebstormProjects/docfill/README.md << 'EOF'
+````powershell
+@'
 # docfill
 
 通用 AI 文档填写工具。上传任意 Word 文档，AI 自动识别并填写字段。
 
 ## 快速启动（开发模式）
 
-```bash
+```powershell
 # 1. 启动 OnlyOffice + PostgreSQL
 docker compose up -d postgres onlyoffice
 
 # 2. 后端
-cd backend
-python -m venv .venv && source .venv/bin/activate
+Set-Location backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-cp .env.example .env  # 填入 LLM_API_KEY
+Copy-Item .env.example .env  # 填入 LLM_API_KEY
 uvicorn app.main:app --reload --port 8002
 
 # 3. 前端
@@ -3186,7 +3399,7 @@ npm run dev -- --port 3001
 
 ## 生产部署
 
-```bash
+```powershell
 docker compose up -d
 ```
 
@@ -3205,13 +3418,13 @@ docker compose up -d
 | 后端 API | 8002 |
 | OnlyOffice | 8080 |
 | PostgreSQL | 5433 |
-EOF
-```
+'@ | Set-Content -Encoding UTF8 E:\WebstormProjects\docfill\README.md
+````
 
 - [ ] **Step 2: 最终提交**
 
-```bash
-cd ~/WebstormProjects/docfill
+```powershell
+Set-Location E:\WebstormProjects\docfill
 git add README.md
 git commit -m "docs: 项目 README"
 ```
@@ -3231,11 +3444,17 @@ git commit -m "docs: 项目 README"
 - ✅ OnlyOffice 预览 → Task 11 (OnlyOfficeEditor)
 - ✅ 字段写回下载 → Task 7 (confirm + download)
 - ✅ 降级处理（OnlyOffice 不可用）→ Task 11 OnlyOfficeEditor error state
-- ✅ 续传 → Task 7 (partial_fields)
+- ✅ chunk 级续传 → Task 5 (fill_stream start_chunk/partial_result) + Task 7 (fill_progress)
+- ✅ 取消/继续 → Task 7 (fill_progress.cancelled) + Task 11 (AiPanel paused 状态)
+- ✅ chunk 级分块 LLM 调用 + 合并策略 → Task 5 (last non-empty validated wins)
+- ✅ 占位符过滤 → Task 5 (_validate_value)
+- ✅ OnlyOffice 回调安全 → Task 7 (filling/paused 期间不覆盖文件)
 - ✅ Docker 部署 → Task 13
 - ✅ 消费级 UI（深色渐变首页）→ Task 10
 - ✅ 测试覆盖 → Tasks 4/5/8/12
 
 **类型一致性：**
 - `DocField.id` / `DocField.label` / `DocField.value` 在 types/document.ts 定义，AiPanel / PersonalInfoModal / sse.ts 均引用同一类型
-- SSE 事件格式在 `ai_filler.py` 和 `sse.ts` 双侧对齐（`field_filled` / `field_requires_input` / `progress` / `done` / `error`）
+- `DocumentStatus` 包含 `'paused'` 状态，与后端 `fill_progress.cancelled` + `status = "paused"` 对齐
+- `AiFillState` 包含 `'paused'` 状态，AiPanel 按钮状态机覆盖 idle/filling/paused/done 四态
+- SSE 事件格式在 `ai_filler.py` 和 `sse.ts` 双侧对齐（`field_filled` / `field_requires_input` / `progress` / `done` / `error` / `cancelled`）
