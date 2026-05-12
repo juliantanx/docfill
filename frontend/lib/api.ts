@@ -1,3 +1,5 @@
+import type { DocumentInfo, EditorTokenResponse } from '@/types/document'
+
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8002'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -44,22 +46,22 @@ export async function uploadReference(docId: string, file: File) {
 }
 
 export const getDocument = (docId: string) =>
-  request(`/api/v1/documents/${docId}`)
+  request<DocumentInfo>(`/api/v1/documents/${docId}`)
 
 export const getEditorToken = (docId: string) =>
-  request(`/api/v1/documents/${docId}/editor-token`)
+  request<EditorTokenResponse>(`/api/v1/documents/${docId}/editor-token`)
 
 export const updateField = (docId: string, fieldId: string, value: string) =>
-  request(`/api/v1/documents/${docId}/fields/${fieldId}`, {
+  request<unknown>(`/api/v1/documents/${docId}/fields/${fieldId}`, {
     method: 'PATCH',
     body: JSON.stringify({ value }),
   })
 
 export const confirmFields = (docId: string) =>
-  request(`/api/v1/documents/${docId}/confirm`, { method: 'POST' })
+  request<{ download_url: string }>(`/api/v1/documents/${docId}/confirm`, { method: 'POST' })
 
 export const cancelAiFill = (docId: string) =>
-  request(`/api/v1/documents/${docId}/ai-fill-cancel`, { method: 'POST' })
+  request<unknown>(`/api/v1/documents/${docId}/ai-fill-cancel`, { method: 'POST' })
 
 export const getDownloadUrl = (docId: string) =>
   `${BASE_URL}/api/v1/documents/${docId}/download`

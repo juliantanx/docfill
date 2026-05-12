@@ -1,5 +1,4 @@
 """Word 文档解析器 — 提取大纲和书签。"""
-import re
 from docx import Document as DocxDocument
 
 
@@ -47,10 +46,11 @@ class WordParser:
         parent = elem.getparent()
         idx = list(parent).index(elem)
         bookmark_start = etree.SubElement(parent, qn("w:bookmarkStart"))
-        bookmark_start.set(qn("w:id"), "0")
+        bid = str(abs(hash(bookmark_name)) % 100000)
+        bookmark_start.set(qn("w:id"), bid)
         bookmark_start.set(qn("w:name"), bookmark_name)
         bookmark_end = etree.SubElement(parent, qn("w:bookmarkEnd"))
-        bookmark_end.set(qn("w:id"), "0")
+        bookmark_end.set(qn("w:id"), bid)
         # Reorder so bookmarkStart is before the run
         parent.remove(bookmark_start)
         parent.insert(idx, bookmark_start)

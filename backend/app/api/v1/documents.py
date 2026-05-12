@@ -40,7 +40,8 @@ def _extract_text(file_path: str) -> str:
     try:
         doc = DocxDocument(file_path)
         return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
-    except Exception:
+    except Exception as e:
+        logger.warning("提取文本失败 %s: %s", file_path, e)
         return ""
 
 
@@ -298,7 +299,11 @@ def trigger_ai_fill(doc_id: str, resume: bool = False, db: Session = Depends(get
                         field["status"] = "filled" if partial[field_id] else "empty"
                 _doc.fields = fields_to_save
                 _doc.partial_fields = dict(partial)
-                _doc.status = "error" if errored else "ready"
+                _cancelled = (_doc.fill_progress or {}).get("cancelled", False)
+                if _cancelled:
+                    _doc.status = "paused"
+                else:
+                    _doc.status = "error" if errored else "ready"
                 _doc.error_message = error_message
                 gen_db.commit()
             gen_db.close()

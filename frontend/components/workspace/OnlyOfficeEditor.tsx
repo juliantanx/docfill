@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { getEditorToken } from '@/lib/api'
+import type { EditorTokenResponse } from '@/types/document'
 
 interface Props {
   docId: string
@@ -24,7 +25,7 @@ export default function OnlyOfficeEditor({ docId }: Props) {
 
     async function init() {
       try {
-        const tokenData = await getEditorToken(docId) as { config: object }
+        const tokenData: EditorTokenResponse = await getEditorToken(docId)
 
         const script = document.createElement('script')
         script.src = `${ONLYOFFICE_URL}/web-apps/apps/api/documents/api.js`

@@ -54,12 +54,14 @@ export default function WorkspacePage({ params }: Props) {
     } else if (event.type === 'cancelled') {
       setAiFillState('paused')
       setProgress(0)
+      if (pendingInputFieldsRef.current.length > 0) {
+        setPendingInputField(pendingInputFieldsRef.current.shift() ?? null)
+      }
     } else if (event.type === 'done') {
       setAiFillState('done')
       setProgress(100)
       if (pendingInputFieldsRef.current.length > 0) {
-        setPendingInputField(pendingInputFieldsRef.current[0])
-        pendingInputFieldsRef.current = []
+        setPendingInputField(pendingInputFieldsRef.current.shift() ?? null)
       }
     }
   }, [])
@@ -106,11 +108,11 @@ export default function WorkspacePage({ params }: Props) {
 
   const handlePersonalInfoSubmit = useCallback(async (fieldId: string, value: string) => {
     await handleFieldChange(fieldId, value)
-    setPendingInputField(null)
+    setPendingInputField(pendingInputFieldsRef.current.shift() ?? null)
   }, [handleFieldChange])
 
   const handleConfirmAndDownload = useCallback(async () => {
-    const result = await confirmFields(docId) as { download_url: string }
+    const result = await confirmFields(docId)
     window.open(result.download_url, '_blank')
   }, [docId])
 
@@ -165,7 +167,7 @@ export default function WorkspacePage({ params }: Props) {
         <PersonalInfoModal
           field={pendingInputField}
           onSubmit={handlePersonalInfoSubmit}
-          onSkip={() => setPendingInputField(null)}
+          onSkip={() => setPendingInputField(pendingInputFieldsRef.current.shift() ?? null)}
         />
       )}
     </div>

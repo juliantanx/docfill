@@ -41,6 +41,12 @@ export interface UploadResponse {
   message: string
 }
 
+export interface EditorTokenResponse {
+  doc_url: string
+  doc_key: string
+  config: object
+}
+
 export interface FieldFilledEvent {
   type: 'field_filled'
   id: string

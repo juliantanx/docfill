@@ -73,14 +73,19 @@ class TemplateFiller:
                         self._replace_in_paragraph(para, pattern, replacement)
 
     def _replace_in_paragraph(self, paragraph, pattern: re.Pattern, replacement: str):
-        """在单个段落中执行 run 级别替换。"""
+        """在单个段落中执行 run 级别替换，尽量保留格式。"""
         full_text = paragraph.text
         if not pattern.search(full_text):
             return
-        # Simple approach: rebuild runs
+        if not paragraph.runs:
+            return
+        # Try single-run replacement first (preserves formatting)
+        for run in paragraph.runs:
+            if pattern.search(run.text):
+                run.text = pattern.sub(replacement, run.text)
+                return
+        # Cross-run fallback: consolidate into first run
         new_text = pattern.sub(replacement, full_text)
-        if paragraph.runs:
-            # Clear all runs except first, set text on first
-            for run in paragraph.runs[1:]:
-                run.text = ""
-            paragraph.runs[0].text = new_text
+        for run in paragraph.runs[1:]:
+            run.text = ""
+        paragraph.runs[0].text = new_text

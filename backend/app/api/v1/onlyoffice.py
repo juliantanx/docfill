@@ -28,7 +28,6 @@ async def onlyoffice_callback(
                     response = await client.get(url)
                 with open(doc.file_path, "wb") as f:
                     f.write(response.content)
-                doc.updated_at = None
                 db.commit()
 
     return {"error": 0}
