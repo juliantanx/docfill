@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-from: #0f0c29;
+  --bg-via: #302b63;
+  --bg-to: #24243e;
+}
+
+body {
+  background: #0f0c29;
+  color: #fff;
+  min-height: 100vh;
+}
