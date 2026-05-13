@@ -1,6 +1,6 @@
 import type { AiFillEvent } from '@/types/document'
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8002'
+const BASE_URL = ''
 
 export function connectAiFillStream(
   docId: string,

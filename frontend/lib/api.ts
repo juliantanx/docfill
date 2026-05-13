@@ -1,6 +1,6 @@
 import type { DocumentInfo, EditorTokenResponse } from '@/types/document'
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8002'
+const BASE_URL = ''
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {

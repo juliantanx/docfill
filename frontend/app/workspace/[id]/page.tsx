@@ -1,8 +1,8 @@
 'use client'
-import { useEffect, useState, useCallback, useRef, use } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import type { DocumentInfo, DocField, AiFillEvent } from '@/types/document'
-import { getDocument, updateField, confirmFields, cancelAiFill, getDownloadUrl } from '@/lib/api'
+import { getDocument, updateField, confirmFields, cancelAiFill } from '@/lib/api'
 import { connectAiFillStream } from '@/lib/sse'
 import OutlineSidebar from '@/components/workspace/OutlineSidebar'
 import OnlyOfficeEditor from '@/components/workspace/OnlyOfficeEditor'
@@ -10,11 +10,11 @@ import AiPanel from '@/components/workspace/AiPanel'
 import PersonalInfoModal from '@/components/workspace/PersonalInfoModal'
 
 interface Props {
-  params: Promise<{ id: string }>
+  params: { id: string }
 }
 
 export default function WorkspacePage({ params }: Props) {
-  const { id: docId } = use(params)
+  const docId = params.id
   const router = useRouter()
   const [doc, setDoc] = useState<DocumentInfo | null>(null)
   const [fields, setFields] = useState<DocField[]>([])
@@ -93,9 +93,11 @@ export default function WorkspacePage({ params }: Props) {
   }, [docId, handleAiEvent])
 
   const stopAiFill = useCallback(async () => {
+    abortFill?.()
     await cancelAiFill(docId)
-    setAiFillState('filling')
-  }, [docId])
+    setAbortFill(null)
+    setAiFillState('paused')
+  }, [docId, abortFill])
 
   const handleFieldChange = useCallback(async (fieldId: string, value: string) => {
     await updateField(docId, fieldId, value)

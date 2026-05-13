@@ -1,14 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import DropZone from '@/components/upload/DropZone'
 
-jest.mock('framer-motion', () => ({
-  motion: {
-    label: ({ children, ...props }: React.ComponentProps<'label'>) => <label {...props}>{children}</label>,
-    div: ({ children, ...props }: React.ComponentProps<'div'>) => <div {...props}>{children}</div>,
-  },
-  AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}))
-
 test('calls onFileSelect with .docx file', () => {
   const onSelect = jest.fn()
   render(<DropZone onFileSelect={onSelect} />)

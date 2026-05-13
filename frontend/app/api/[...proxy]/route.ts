@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server'
 const BACKEND = process.env.BACKEND_URL ?? 'http://localhost:8002'
 
 async function proxy(req: NextRequest, path: string) {
-  const url = `${BACKEND}${path}`
+  const url = `${BACKEND}/api${path}`
   const headers = new Headers(req.headers)
   headers.delete('host')
 

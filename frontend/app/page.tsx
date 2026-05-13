@@ -1,7 +1,6 @@
 'use client'
 import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
 import DropZone from '@/components/upload/DropZone'
 import UploadProgress from '@/components/upload/UploadProgress'
 import { uploadDocument, uploadReference } from '@/lib/api'
@@ -41,18 +40,27 @@ export default function HomePage() {
     }
   }, [docId])
 
+  const handleRefsUpload = useCallback(async (files: File[]) => {
+    if (!docId) return
+    const names: string[] = []
+    for (const file of files) {
+      try {
+        await uploadReference(docId, file)
+        names.push(file.name)
+      } catch {
+        // reference upload failure doesn't block main flow
+      }
+    }
+    if (names.length > 0) setRefs((prev) => [...prev, ...names])
+  }, [docId])
+
   const handleStart = () => {
     if (docId) router.push(`/workspace/${docId}`)
   }
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-[#0f0c29] via-[#302b63] to-[#24243e] px-4">
-      <motion.div
-        className="mb-12 text-center"
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-      >
+      <div className="mb-12 text-center animate-[fadeInDown_0.6s_ease-out]">
         <h1 className="text-5xl font-bold tracking-tight">
           <span className="bg-gradient-to-r from-violet-400 to-blue-400 bg-clip-text text-transparent">
             docfill
@@ -60,14 +68,9 @@ export default function HomePage() {
         </h1>
         <p className="mt-3 text-lg text-white/60">上传文档，AI 智能填写</p>
         <p className="mt-1 text-sm text-white/30">支持合同、表单、试卷等任意 Word 文档</p>
-      </motion.div>
+      </div>
 
-      <motion.div
-        className="w-full max-w-xl"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.2 }}
-      >
+      <div className="w-full max-w-xl animate-[fadeInUp_0.6s_ease-out_0.2s_both]">
         {stage === 'idle' ? (
           <DropZone onFileSelect={handleDocUpload} className="h-64 w-full" />
         ) : (
@@ -78,41 +81,35 @@ export default function HomePage() {
           />
         )}
 
-        <AnimatePresence>
-          {stage === 'ready' && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="mt-4"
-            >
-              <DropZone
-                onFileSelect={handleRefUpload}
-                label="+ 添加参考文档（可选）"
-                className="h-24 w-full"
-              />
-              {refs.length > 0 && (
-                <ul className="mt-2 space-y-1">
-                  {refs.map((r) => (
-                    <li key={r} className="text-xs text-white/40">✓ {r}</li>
-                  ))}
-                </ul>
-              )}
+        {stage === 'ready' && (
+          <div className="mt-4">
+            <DropZone
+              onFileSelect={handleRefUpload}
+              onFilesSelect={handleRefsUpload}
+              multiple
+              label="+ 添加参考文档（可选，支持多选）"
+              className="h-24 w-full"
+            />
+            {refs.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {refs.map((r) => (
+                  <li key={r} className="text-xs text-white/40">✓ {r}</li>
+                ))}
+              </ul>
+            )}
 
-              <motion.button
-                className="mt-6 w-full rounded-xl bg-gradient-to-r from-violet-600 to-blue-600
-                           py-4 text-base font-semibold text-white shadow-lg
-                           hover:from-violet-500 hover:to-blue-500 active:scale-95"
-                onClick={handleStart}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                开始 AI 填写 →
-              </motion.button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
+            <button
+              className="mt-6 w-full rounded-xl bg-gradient-to-r from-violet-600 to-blue-600
+                         py-4 text-base font-semibold text-white shadow-lg
+                         hover:from-violet-500 hover:to-blue-500 active:scale-95
+                         transition-transform duration-150"
+              onClick={handleStart}
+            >
+              开始 AI 填写 →
+            </button>
+          </div>
+        )}
+      </div>
     </main>
   )
 }

@@ -23,6 +23,31 @@ export default function AiPanel({
 }: Props) {
   const filledCount = fields.filter((f) => f.value).length
   const totalCount = fields.length
+  const isFilling = aiFillState === 'filling'
+  const isPaused = aiFillState === 'paused'
+  const actionLabel = isFilling
+    ? '取消填写'
+    : isPaused
+      ? '继续填写'
+      : aiFillState === 'done'
+        ? '重新 AI 填写'
+        : 'AI 自动填写'
+  const actionClassName = isFilling
+    ? 'border border-red-500/50 bg-red-500/10 text-red-400 hover:bg-red-500/20'
+    : isPaused
+      ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white hover:opacity-90 active:scale-95'
+      : 'bg-gradient-to-r from-violet-600 to-blue-600 text-white hover:opacity-90 active:scale-95'
+  const handleActionClick = () => {
+    if (isFilling) {
+      onStopFill()
+      return
+    }
+    if (isPaused) {
+      onResumeFill()
+      return
+    }
+    onStartFill()
+  }
 
   return (
     <aside className="flex w-80 shrink-0 flex-col border-l border-white/10 bg-gray-900/80 backdrop-blur">
@@ -35,31 +60,13 @@ export default function AiPanel({
         </div>
 
         <div className="mt-3">
-          {aiFillState === 'filling' ? (
-            <button
-              onClick={onStopFill}
-              className="w-full rounded-lg border border-red-500/50 bg-red-500/10
-                         py-2 text-sm font-medium text-red-400 hover:bg-red-500/20"
-            >
-              取消填写
-            </button>
-          ) : aiFillState === 'paused' ? (
-            <button
-              onClick={onResumeFill}
-              className="w-full rounded-lg bg-gradient-to-r from-amber-600 to-orange-600
-                         py-2 text-sm font-medium text-white hover:opacity-90 active:scale-95"
-            >
-              继续填写
-            </button>
-          ) : (
-            <button
-              onClick={onStartFill}
-              className="w-full rounded-lg bg-gradient-to-r from-violet-600 to-blue-600
-                         py-2 text-sm font-medium text-white hover:opacity-90 active:scale-95"
-            >
-              {aiFillState === 'done' ? '重新 AI 填写' : 'AI 自动填写'}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleActionClick}
+            className={`w-full rounded-lg py-2 text-sm font-medium ${actionClassName}`}
+          >
+            <span>{actionLabel}</span>
+          </button>
         </div>
 
         <AiProgressStream progress={progress} state={aiFillState === 'paused' ? 'idle' : aiFillState} />

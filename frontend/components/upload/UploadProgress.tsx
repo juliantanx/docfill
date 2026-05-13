@@ -1,5 +1,4 @@
 'use client'
-import { motion } from 'framer-motion'
 
 interface UploadProgressProps {
   filename: string
@@ -24,11 +23,9 @@ export default function UploadProgress({ filename, state, message }: UploadProgr
 
       {state !== 'ready' && state !== 'error' && (
         <div className="h-1 overflow-hidden rounded-full bg-white/10">
-          <motion.div
-            className="h-full rounded-full bg-gradient-to-r from-violet-500 to-blue-500"
-            initial={{ width: '0%' }}
-            animate={{ width: state === 'parsing' ? '70%' : '30%' }}
-            transition={{ duration: 1, ease: 'easeInOut' }}
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-violet-500 to-blue-500 transition-all duration-1000 ease-in-out"
+            style={{ width: state === 'parsing' ? '70%' : '30%' }}
           />
         </div>
       )}

@@ -1,47 +1,100 @@
 # docfill
 
-通用 AI 文档填写工具。上传任意 Word 文档，AI 自动识别并填写字段。
+Universal AI-powered document filling tool. Upload any Word document, and AI automatically identifies and fills in the fields.
 
-## 快速启动（开发模式）
+[中文文档](./README.zh-CN.md)
 
-```powershell
-# 1. 启动 OnlyOffice + PostgreSQL
+## Features
+
+- **Smart Field Detection** — Recognizes blanks, brackets, parentheses, and table cells in Word documents
+- **AI Auto-Fill** — Supports reference documents or direct AI answering for knowledge-based content
+- **Real-time Streaming** — SSE-based progress with pause/resume support
+- **Personal Info Handling** — Prompts for manual input when AI cannot determine values (name, company, etc.)
+- **Document Preview** — Integrated OnlyOffice editor for live preview
+- **Download** — Export the filled document as a new Word file
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Next.js 14 App Router + Tailwind CSS + shadcn/ui + Framer Motion |
+| Backend | FastAPI + PostgreSQL + SQLAlchemy 2.0 |
+| Document Preview | OnlyOffice Document Server 8.x |
+| AI | OpenAI-compatible API (configurable base_url / model) |
+
+## Quick Start (Development)
+
+```bash
+# 1. Start OnlyOffice + PostgreSQL
 docker compose up -d postgres onlyoffice
 
-# 2. 后端
+# 2. Backend
 cd backend
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+source .venv/bin/activate   # Windows: .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-Copy-Item .env.example .env  # 填入 LLM_API_KEY
+cp .env.example .env        # Fill in LLM_API_KEY
 uvicorn app.main:app --reload --port 8002
 
-# 3. 前端
+# 3. Frontend
 cd frontend
 npm install
 npm run dev -- --port 3001
 ```
 
-访问 http://localhost:3001
+Visit http://localhost:3001
 
-## 生产部署
+## Production Deployment
 
-```powershell
+```bash
+# 1. Configure LLM (root .env)
+cp .env.example .env
+# Edit .env: fill in LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
+
+# 2. Start all services
 docker compose up -d
 ```
 
-## 技术栈
+## Configuration
 
-- 前端：Next.js 14 App Router + Tailwind CSS + shadcn/ui + Framer Motion
-- 后端：FastAPI + PostgreSQL + SQLAlchemy 2.0
-- 文档预览：OnlyOffice Document Server 8.x
-- AI：OpenAI-compatible API（可配置 base_url / model）
+All settings are configured via environment variables in the root `.env` file:
 
-## 端口
+### LLM
 
-| 服务 | 端口 |
-|------|------|
-| 前端 | 3001 |
-| 后端 API | 8002 |
-| OnlyOffice | 8080 |
-| PostgreSQL | 5433 |
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `LLM_BASE_URL` | OpenAI-compatible API endpoint | `https://api.openai.com/v1` |
+| `LLM_API_KEY` | API key | (required) |
+| `LLM_MODEL` | Model name | `gpt-4o-mini` |
+
+Compatible providers: OpenAI, DeepSeek, Qwen, local Ollama, etc.
+
+### Ports
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `FRONTEND_PORT` | Frontend web UI | `3001` |
+| `BACKEND_PORT` | Backend API | `8002` |
+| `ONLYOFFICE_PORT` | OnlyOffice editor | `8080` |
+| `POSTGRES_PORT` | PostgreSQL database | `5433` |
+
+## Project Structure
+
+```
+docfill/
+├── backend/                 # FastAPI backend
+│   ├── app/
+│   │   ├── api/v1/          # API endpoints
+│   │   ├── core/            # Config, database, dependencies
+│   │   ├── models/          # SQLAlchemy models
+│   │   ├── schemas/         # Pydantic schemas
+│   │   └── services/        # Business logic (AI, template, parser)
+│   └── tests/               # Backend tests
+├── frontend/                # Next.js frontend
+│   ├── app/                 # Pages (App Router)
+│   ├── components/          # React components
+│   ├── lib/                 # API client, SSE, utilities
+│   └── types/               # TypeScript types
+├── docker-compose.yml       # Production orchestration
+└── .env.example             # Root environment config
+```

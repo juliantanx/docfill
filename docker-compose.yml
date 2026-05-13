@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: docfill
       POSTGRES_PASSWORD: docfill_dev
     ports:
-      - "5433:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -18,7 +18,7 @@ services:
   onlyoffice:
     image: onlyoffice/documentserver:8.2
     ports:
-      - "8080:80"
+      - "${ONLYOFFICE_PORT:-8080}:80"
     environment:
       ALLOW_PRIVATE_IP_ADDRESS: "true"
       ALLOW_META_IP_ADDRESS: "true"
@@ -35,11 +35,14 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "8002:8002"
+      - "${BACKEND_PORT:-8002}:8002"
     environment:
       DATABASE_URL: "postgresql+psycopg://docfill:docfill_dev@postgres:5432/docfill"
       HOST_URL: "http://backend:8002"
       ONLYOFFICE_URL: "http://onlyoffice:80"
+      LLM_BASE_URL: "${LLM_BASE_URL}"
+      LLM_API_KEY: "${LLM_API_KEY}"
+      LLM_MODEL: "${LLM_MODEL}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,11 +55,11 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "3001:3001"
+      - "${FRONTEND_PORT:-3001}:3001"
     environment:
-      NEXT_PUBLIC_API_URL: "http://localhost:8002"
+      NEXT_PUBLIC_API_URL: "http://localhost:${BACKEND_PORT:-8002}"
       BACKEND_URL: "http://backend:8002"
-      NEXT_PUBLIC_ONLYOFFICE_URL: "http://localhost:8080"
+      NEXT_PUBLIC_ONLYOFFICE_URL: "http://localhost:${ONLYOFFICE_PORT:-8080}"
     depends_on:
       - backend
 
