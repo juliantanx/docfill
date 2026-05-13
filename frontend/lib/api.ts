@@ -63,5 +63,8 @@ export const confirmFields = (docId: string) =>
 export const cancelAiFill = (docId: string) =>
   request<unknown>(`/api/v1/documents/${docId}/ai-fill-cancel`, { method: 'POST' })
 
+export const fillPreview = (docId: string) =>
+  request<{ success: boolean }>(`/api/v1/documents/${docId}/fill-preview`, { method: 'POST' })
+
 export const getDownloadUrl = (docId: string) =>
   `${BASE_URL}/api/v1/documents/${docId}/download`

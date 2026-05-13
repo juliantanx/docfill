@@ -82,27 +82,66 @@ export default function HomePage() {
         )}
 
         {stage === 'ready' && (
-          <div className="mt-4">
-            <DropZone
-              onFileSelect={handleRefUpload}
-              onFilesSelect={handleRefsUpload}
-              multiple
-              label="+ 添加参考文档（可选，支持多选）"
-              className="h-24 w-full"
-            />
+          <div className="mt-5 animate-[fadeInUp_0.4s_ease-out_both]">
+            {/* Reference docs upload — horizontal inline */}
+            <label
+              className="group flex w-full items-center gap-3 rounded-xl border border-dashed
+                         border-white/15 bg-white/[0.03] px-4 py-3 cursor-pointer
+                         hover:border-white/30 hover:bg-white/[0.06] transition-all duration-200"
+              onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-violet-400/50') }}
+              onDragLeave={(e) => { e.currentTarget.classList.remove('border-violet-400/50') }}
+              onDrop={(e) => {
+                e.preventDefault()
+                e.currentTarget.classList.remove('border-violet-400/50')
+                const files = Array.from(e.dataTransfer.files)
+                if (files.length > 0) handleRefsUpload(files)
+              }}
+            >
+              <input
+                type="file"
+                accept=".docx,.doc"
+                multiple
+                className="sr-only"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files ?? [])
+                  if (files.length > 0) handleRefsUpload(files)
+                }}
+              />
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md
+                               border border-white/10 bg-white/5 text-white/40
+                               group-hover:border-white/20 group-hover:text-white/60 transition-colors">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M8 3v10M3 8h10" />
+                </svg>
+              </span>
+              <span className="text-sm text-white/40 group-hover:text-white/60 transition-colors">
+                添加参考文档（可选，支持多选）
+              </span>
+            </label>
+
+            {/* Uploaded refs as chips */}
             {refs.length > 0 && (
-              <ul className="mt-2 space-y-1">
+              <div className="mt-2 flex flex-wrap gap-1.5">
                 {refs.map((r) => (
-                  <li key={r} className="text-xs text-white/40">✓ {r}</li>
+                  <span
+                    key={r}
+                    className="inline-flex items-center gap-1 rounded-md border border-white/10
+                               bg-white/[0.04] px-2 py-0.5 text-xs text-white/50"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-green-400/60">
+                      <path d="M2.5 6.5L5 9l4.5-6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <span className="max-w-[160px] truncate">{r}</span>
+                  </span>
                 ))}
-              </ul>
+              </div>
             )}
 
             <button
-              className="mt-6 w-full rounded-xl bg-gradient-to-r from-violet-600 to-blue-600
+              className="mt-5 w-full rounded-xl bg-gradient-to-r from-violet-600 to-blue-600
                          py-4 text-base font-semibold text-white shadow-lg
-                         hover:from-violet-500 hover:to-blue-500 active:scale-95
-                         transition-transform duration-150"
+                         hover:from-violet-500 hover:to-blue-500 active:scale-[0.98]
+                         transition-all duration-150"
               onClick={handleStart}
             >
               开始 AI 填写 →

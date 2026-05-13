@@ -6,8 +6,6 @@ interface DropZoneProps {
   label?: string
   accept?: string
   className?: string
-  multiple?: boolean
-  onFilesSelect?: (files: File[]) => void
 }
 
 export default function DropZone({
@@ -15,8 +13,6 @@ export default function DropZone({
   label = '拖拽或点击上传 Word 文档',
   accept = '.docx,.doc',
   className = '',
-  multiple = false,
-  onFilesSelect,
 }: DropZoneProps) {
   const [isDragging, setIsDragging] = useState(false)
 
@@ -24,26 +20,18 @@ export default function DropZone({
     (e: React.DragEvent) => {
       e.preventDefault()
       setIsDragging(false)
-      const files = Array.from(e.dataTransfer.files)
-      if (multiple && onFilesSelect && files.length > 1) {
-        onFilesSelect(files)
-      } else if (files[0]) {
-        onFileSelect(files[0])
-      }
+      const file = e.dataTransfer.files[0]
+      if (file) onFileSelect(file)
     },
-    [onFileSelect, multiple, onFilesSelect],
+    [onFileSelect],
   )
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(e.target.files ?? [])
-      if (multiple && onFilesSelect && files.length > 1) {
-        onFilesSelect(files)
-      } else if (files[0]) {
-        onFileSelect(files[0])
-      }
+      const file = e.target.files?.[0]
+      if (file) onFileSelect(file)
     },
-    [onFileSelect, multiple, onFilesSelect],
+    [onFileSelect],
   )
 
   return (
@@ -58,14 +46,22 @@ export default function DropZone({
       onDragLeave={() => setIsDragging(false)}
       onDrop={handleDrop}
     >
-      <input type="file" accept={accept} multiple={multiple} className="sr-only" onChange={handleChange} />
+      <input type="file" accept={accept} className="sr-only" onChange={handleChange} />
 
       <div className="flex flex-col items-center gap-4 p-12 text-center">
         <div
-          className="text-5xl transition-transform duration-200"
-          style={{ transform: isDragging ? 'scale(1.2) rotate(5deg)' : 'scale(1) rotate(0deg)' }}
+          className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl
+                     border border-white/10 bg-white/5 text-white/30
+                     transition-transform duration-200"
+          style={{ transform: isDragging ? 'scale(1.15) rotate(5deg)' : 'scale(1) rotate(0deg)' }}
         >
-          📄
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <polyline points="10 9 9 9 8 9" />
+          </svg>
         </div>
         <p className="text-lg font-medium text-white/80">{label}</p>
         <p className="text-sm text-white/40">支持 .docx、.doc 格式</p>

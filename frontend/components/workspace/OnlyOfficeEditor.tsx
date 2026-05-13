@@ -5,6 +5,7 @@ import type { EditorTokenResponse } from '@/types/document'
 
 interface Props {
   docId: string
+  onReady?: (api: { refresh: () => void }) => void
 }
 
 declare global {
@@ -48,13 +49,15 @@ function loadOnlyOfficeScript(src: string): Promise<void> {
   return onlyOfficeScriptPromise
 }
 
-function OnlyOfficeEditor({ docId }: Props) {
+function OnlyOfficeEditor({ docId, onReady }: Props) {
   const editorHostId = useId().replace(/:/g, '-')
   const containerRef = useRef<HTMLDivElement>(null)
   const loadingRef = useRef<HTMLDivElement>(null)
   const mountNodeRef = useRef<HTMLDivElement | null>(null)
+  const editorRef = useRef<{ destroyEditor?: () => void } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const unmountedRef = useRef(false)
+  const initFnRef = useRef<(() => Promise<void>) | null>(null)
 
   useEffect(() => {
     unmountedRef.current = false
@@ -62,7 +65,6 @@ function OnlyOfficeEditor({ docId }: Props) {
     // Show loading overlay imperatively
     if (loadingRef.current) loadingRef.current.style.display = ''
     const container = containerRef.current
-    let editorInstance: { destroyEditor?: () => void } | null = null
 
     const ONLYOFFICE_URL = process.env.NEXT_PUBLIC_ONLYOFFICE_URL ?? 'http://localhost:8080'
 
@@ -91,7 +93,7 @@ function OnlyOfficeEditor({ docId }: Props) {
         mountNodeRef.current = mountNode
 
         try {
-          editorInstance = new window.DocsAPI.DocEditor(mountNode.id, {
+          editorRef.current = new window.DocsAPI.DocEditor(mountNode.id, {
             ...tokenData.config,
             events: {
               onDocumentReady: () => {
@@ -119,14 +121,15 @@ function OnlyOfficeEditor({ docId }: Props) {
       }
     }
 
+    initFnRef.current = init
     init()
 
     return () => {
       unmountedRef.current = true
-      if (editorInstance?.destroyEditor) {
-        try { editorInstance.destroyEditor() } catch { /* ignore */ }
+      if (editorRef.current?.destroyEditor) {
+        try { editorRef.current.destroyEditor() } catch { /* ignore */ }
       }
-      editorInstance = null
+      editorRef.current = null
       // Only remove our own mount node, avoid replaceChildren which removes React-managed nodes
       if (container && mountNodeRef.current) {
         try { container.removeChild(mountNodeRef.current) } catch { /* already removed */ }
@@ -134,6 +137,25 @@ function OnlyOfficeEditor({ docId }: Props) {
       }
     }
   }, [docId, editorHostId])
+
+  // Expose refresh API to parent
+  useEffect(() => {
+    onReady?.({
+      refresh: () => {
+        if (editorRef.current?.destroyEditor) {
+          try { editorRef.current.destroyEditor() } catch { /* ignore */ }
+        }
+        editorRef.current = null
+        const container = containerRef.current
+        if (container && mountNodeRef.current) {
+          try { container.removeChild(mountNodeRef.current) } catch { /* already removed */ }
+          mountNodeRef.current = null
+        }
+        if (loadingRef.current) loadingRef.current.style.display = ''
+        initFnRef.current?.()
+      },
+    })
+  }, [onReady])
 
   if (error) {
     return (

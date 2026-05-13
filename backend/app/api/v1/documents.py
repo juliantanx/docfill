@@ -22,6 +22,7 @@ from app.schemas.document import (
     FieldUpdateRequest,
 )
 from app.services.ai_filler import AiFiller
+from app.services.doc_converter import convert_doc_to_docx
 from app.services.onlyoffice_service import OnlyOfficeService
 from app.services.template_analyzer import TemplateAnalyzer
 from app.services.template_filler import TemplateFiller
@@ -65,8 +66,11 @@ async def upload_document(
         await f.write(content)
 
     try:
+        # .doc 文件需要先转换为 .docx
+        analyze_path = convert_doc_to_docx(str(file_path), str(upload_dir))
+
         analyzer = TemplateAnalyzer()
-        fields_raw = analyzer.analyze(str(file_path))
+        fields_raw = analyzer.analyze(analyze_path)
         fields = [
             {
                 "id": f.id,
@@ -81,9 +85,12 @@ async def upload_document(
             for f in fields_raw
         ]
 
-        parser = WordParser(str(file_path))
+        parser = WordParser(analyze_path)
         outline = parser.extract_outline()
-        parser.doc.save(str(file_path))
+        parser.doc.save(analyze_path)
+        # 更新 file_path 为转换后的 .docx
+        if analyze_path != str(file_path):
+            file_path = Path(analyze_path)
 
         status = "ready" if fields else "error"
         error_message = None if fields else "未识别到可填写字段"
@@ -386,6 +393,41 @@ def confirm_fields(doc_id: str, db: Session = Depends(get_db)):
         download_url=download_url,
         message="字段已写入文档，可以下载",
     )
+
+
+@router.post("/{doc_id}/fill-preview")
+def fill_preview(doc_id: str, db: Session = Depends(get_db)):
+    """AI 填写完成后，将字段值写回文档用于预览（不改变下载状态）。"""
+    doc = db.get(Document, doc_id)
+    if not doc or not doc.fields:
+        raise HTTPException(400, "文档或字段不存在")
+
+    field_values = {
+        f["id"]: f["value"]
+        for f in doc.fields
+        if f.get("value")
+    }
+    if not field_values:
+        raise HTTPException(400, "没有已填写的字段")
+
+    analyzer = TemplateAnalyzer()
+    fields_raw = analyzer.analyze(doc.file_path)
+    field_registry = {f.id: f for f in fields_raw}
+
+    output_dir = str(settings.processed_dir / doc_id)
+    filler = TemplateFiller()
+    output_path = filler.fill(
+        template_path=doc.file_path,
+        field_values=field_values,
+        field_registry=field_registry,
+        output_dir=output_dir,
+    )
+
+    # 更新文件路径但不改变 status（保持 ready，让用户仍可手动确认下载）
+    doc.file_path = output_path
+    db.commit()
+
+    return {"success": True}
 
 
 @router.get("/{doc_id}/download")

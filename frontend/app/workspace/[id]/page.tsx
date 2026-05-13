@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import type { DocumentInfo, DocField, AiFillEvent } from '@/types/document'
-import { getDocument, updateField, confirmFields, cancelAiFill } from '@/lib/api'
+import { getDocument, updateField, confirmFields, cancelAiFill, fillPreview } from '@/lib/api'
 import { connectAiFillStream } from '@/lib/sse'
 import OutlineSidebar from '@/components/workspace/OutlineSidebar'
 import OnlyOfficeEditor from '@/components/workspace/OnlyOfficeEditor'
@@ -23,6 +23,7 @@ export default function WorkspacePage({ params }: Props) {
   const [pendingInputField, setPendingInputField] = useState<DocField | null>(null)
   const pendingInputFieldsRef = useRef<DocField[]>([])
   const [abortFill, setAbortFill] = useState<(() => void) | null>(null)
+  const editorRefreshRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     getDocument(docId).then((data: DocumentInfo) => {
@@ -63,6 +64,10 @@ export default function WorkspacePage({ params }: Props) {
       if (pendingInputFieldsRef.current.length > 0) {
         setPendingInputField(pendingInputFieldsRef.current.shift() ?? null)
       }
+      // 将字段值写回文档并刷新编辑器预览
+      fillPreview(docId).then(() => {
+        editorRefreshRef.current?.()
+      }).catch(() => { /* 预览写入失败不影响主流程 */ })
     }
   }, [])
 
@@ -151,7 +156,10 @@ export default function WorkspacePage({ params }: Props) {
         />
 
         <main className="flex-1 overflow-hidden bg-white">
-          <OnlyOfficeEditor docId={docId} />
+          <OnlyOfficeEditor
+            docId={docId}
+            onReady={(api) => { editorRefreshRef.current = api.refresh }}
+          />
         </main>
 
         <AiPanel
